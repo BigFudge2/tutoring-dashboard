@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}מתגברים | דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>פרופיל מתגבר</h1>
+        <p>ניתוח פעילות לכל מתגבר בנפרד</p>
+    </div>
+    <a href="#" class="btn-refresh" onclick="refreshData(); return false;">
+        <i class="bi bi-arrow-clockwise"></i> רענן
+    </a>
+</div>
+
+<form class="selector-bar" method="get">
+    <label for="tutor-select"><i class="bi bi-person-fill"></i> בחר מתגבר:</label>
+    <select id="tutor-select" name="name" onchange="this.form.submit()">
+        {% for t in tutors %}
+        <option value="{{ t }}" {% if t == selected %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-icon grad-indigo"><i class="bi bi-journal-check"></i></div>
+        <div class="kpi-label">שיעורים</div>
+        <div class="kpi-value">{{ stats.lessons }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-pink"><i class="bi bi-clock-history"></i></div>
+        <div class="kpi-label">סה"כ שעות</div>
+        <div class="kpi-value">{{ stats.hours }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-blue"><i class="bi bi-stopwatch"></i></div>
+        <div class="kpi-label">ממוצע משך</div>
+        <div class="kpi-value">{{ stats.avg_duration }} <small>שעות</small></div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-green"><i class="bi bi-people"></i></div>
+        <div class="kpi-label">סטודנטים</div>
+        <div class="kpi-value">{{ stats.students_count }}</div>
+    </div>
+    {% if stats.avg_rating is not none %}
+    <div class="kpi-card">
+        <div class="kpi-icon grad-orange"><i class="bi bi-star-fill"></i></div>
+        <div class="kpi-label">דירוג ממוצע</div>
+        <div class="kpi-value">{{ stats.avg_rating }} <small>/ 5</small></div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <h3><i class="bi bi-graph-up-arrow"></i> שעות לפי שבוע</h3>
+            <div class="chart-container"><canvas id="weeklyChart"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <h3><i class="bi bi-journal-bookmark"></i> נושאים שלימד</h3>
+            <div class="chart-container"><canvas id="topicsChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="chart-card">
+    <h3><i class="bi bi-list-ul"></i> כל השיעורים של {{ selected }}</h3>
+    <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>תאריך</th>
+                    <th>שעות</th>
+                    <th>משך</th>
+                    <th>נושא</th>
+                    <th>סטודנטים</th>
+                    <th>דירוג</th>
+                    <th>הערות</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lesson in lessons %}
+                <tr>
+                    <td>{{ lesson.get('תאריך שיעור', '—') }}</td>
+                    <td>{{ lesson.get('שעת התחלה', '') }} - {{ lesson.get('שעת סיום', '') }}</td>
+                    <td><span class="badge-soft green">{{ lesson.get('משך (שעות)', '—') }}</span></td>
+                    <td>{{ lesson.get('נושא השיעור', '—') }}</td>
+                    <td><span class="badge-soft">{{ lesson.get('מספר סטודנטים', 0) }} סטודנטים</span></td>
+                    <td>
+                        {% set r = lesson.get('איך היה השיעור?') %}
+                        {% if r %}
+                        <span class="rating-stars">
+                            {% for i in range(1,6) %}{% if i <= r %}★{% else %}<span class="rating-empty">★</span>{% endif %}{% endfor %}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ lesson.get('הערות', '') }}">{{ lesson.get('הערות', '—') or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">אין שיעורים להצגה</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const weeklyLabels = {{ weekly_labels | safe }};
+    const weeklyHours = {{ weekly_hours | safe }};
+    const topicLabels = {{ topic_labels | safe }};
+    const topicValues = {{ topic_values | safe }};
+
+    new Chart(document.getElementById('weeklyChart'), {
+        type: 'line',
+        data: {
+            labels: weeklyLabels,
+            datasets: [{
+                label: 'שעות',
+                data: weeklyHours,
+                borderColor: '#6366f1',
+                backgroundColor: (ctx) => {
+                    const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 300);
+                    gradient.addColorStop(0, 'rgba(99,102,241,0.3)');
+                    gradient.addColorStop(1, 'rgba(99,102,241,0)');
+                    return gradient;
+                },
+                borderWidth: 3,
+                tension: 0.3,
+                fill: true,
+                pointBackgroundColor: '#6366f1',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    const colors = ['#6366f1','#ec4899','#10b981','#f59e0b','#0ea5e9','#8b5cf6','#ef4444','#14b8a6'];
+    new Chart(document.getElementById('topicsChart'), {
+        type: 'doughnut',
+        data: { labels: topicLabels, datasets: [{ data: topicValues, backgroundColor: colors, borderWidth: 0 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: '65%',
+            plugins: { legend: { position: 'bottom', labels: { padding: 10, font: { size: 11 }, boxWidth: 12 } } }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}סקירה כללית | דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>סקירה כללית</h1>
+        <p>מבט-על על פעילות התגבורים</p>
+    </div>
+    <a href="#" class="btn-refresh" onclick="refreshData(); return false;">
+        <i class="bi bi-arrow-clockwise"></i> רענן נתונים
+    </a>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-icon grad-indigo"><i class="bi bi-journal-check"></i></div>
+        <div class="kpi-label">סה"כ שיעורים</div>
+        <div class="kpi-value">{{ total_lessons }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-pink"><i class="bi bi-clock-history"></i></div>
+        <div class="kpi-label">סה"כ שעות</div>
+        <div class="kpi-value">{{ total_hours }} <small>שעות</small></div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-green"><i class="bi bi-person-badge"></i></div>
+        <div class="kpi-label">מתגברים פעילים</div>
+        <div class="kpi-value">{{ active_tutors }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-blue"><i class="bi bi-people-fill"></i></div>
+        <div class="kpi-label">סטודנטים ייחודיים</div>
+        <div class="kpi-value">{{ unique_students }}</div>
+    </div>
+    {% if avg_rating is not none %}
+    <div class="kpi-card">
+        <div class="kpi-icon grad-orange"><i class="bi bi-star-fill"></i></div>
+        <div class="kpi-label">דירוג ממוצע</div>
+        <div class="kpi-value">{{ avg_rating }} <small>/ 5</small></div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Charts row -->
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <h3><i class="bi bi-graph-up"></i> שיעורים לפי חודש</h3>
+            <div class="chart-container"><canvas id="monthlyChart"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <h3><i class="bi bi-pie-chart"></i> התפלגות נושאים</h3>
+            <div class="chart-container"><canvas id="topicsChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <h3><i class="bi bi-trophy"></i> לוח מתגברים</h3>
+            <div class="tutors-leaderboard">
+                {% for t in tutors_list %}
+                <a href="/tutors?name={{ t.name }}" class="tutor-row">
+                    <div class="tutor-rank">
+                        {% if loop.index == 1 %}<span class="medal gold">🥇</span>
+                        {% elif loop.index == 2 %}<span class="medal silver">🥈</span>
+                        {% elif loop.index == 3 %}<span class="medal bronze">🥉</span>
+                        {% else %}<span class="rank-num">{{ loop.index }}</span>{% endif %}
+                    </div>
+                    <div class="tutor-avatar">{{ t.name[:1] }}</div>
+                    <div class="tutor-info">
+                        <div class="tutor-name">{{ t.name }}</div>
+                        <div class="tutor-meta">
+                            <span><i class="bi bi-journal-check"></i> {{ t.lessons }} שיעורים</span>
+                            <span><i class="bi bi-clock"></i> {{ t.hours }} שעות</span>
+                            {% if t.rating is not none %}
+                            <span><i class="bi bi-star-fill" style="color: #f59e0b;"></i> {{ t.rating }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-left tutor-arrow"></i>
+                </a>
+                {% else %}
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem;">אין מתגברים להצגה</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <h3><i class="bi bi-clock"></i> שיעורים אחרונים</h3>
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>תאריך</th>
+                            <th>מתגבר</th>
+                            <th>נושא</th>
+                            <th>משך</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lesson in recent_lessons %}
+                        <tr>
+                            <td>{{ lesson.get('תאריך שיעור', '—') }}</td>
+                            <td><span class="badge-soft">{{ lesson.get('שם מתגבר', '—') }}</span></td>
+                            <td>{{ lesson.get('נושא השיעור', '—') }}</td>
+                            <td>{{ lesson.get('משך (שעות)', '—') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const monthlyLabels = {{ monthly_labels | safe }};
+    const monthlyCounts = {{ monthly_counts | safe }};
+    const topicsLabels = {{ top_topics_labels | safe }};
+    const topicsCounts = {{ top_topics_counts | safe }};
+
+    // Monthly
+    new Chart(document.getElementById('monthlyChart'), {
+        type: 'bar',
+        data: {
+            labels: monthlyLabels,
+            datasets: [{
+                label: 'שיעורים',
+                data: monthlyCounts,
+                backgroundColor: (ctx) => {
+                    const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 300);
+                    gradient.addColorStop(0, 'rgba(99,102,241,0.9)');
+                    gradient.addColorStop(1, 'rgba(236,72,153,0.6)');
+                    return gradient;
+                },
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1 } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    // Topics pie
+    const topicColors = ['#6366f1','#ec4899','#10b981','#f59e0b','#0ea5e9','#8b5cf6','#ef4444','#14b8a6'];
+    new Chart(document.getElementById('topicsChart'), {
+        type: 'doughnut',
+        data: {
+            labels: topicsLabels,
+            datasets: [{
+                data: topicsCounts,
+                backgroundColor: topicColors,
+                borderWidth: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 12, font: { size: 11 }, boxWidth: 12, boxHeight: 12 }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

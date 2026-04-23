@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}נושאים | דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>ניתוח נושאים</h1>
+        <p>קיבוץ נושאים דומים ותובנות ({{ total_groups }} קבוצות)</p>
+    </div>
+    <a href="#" class="btn-refresh" onclick="refreshData(); return false;">
+        <i class="bi bi-arrow-clockwise"></i> רענן
+    </a>
+</div>
+
+<form class="selector-bar" method="get">
+    <label for="threshold"><i class="bi bi-sliders"></i> סף דמיון:</label>
+    <input type="range" id="threshold" name="threshold" min="50" max="100" step="5" value="{{ threshold }}"
+           oninput="document.getElementById('threshold-val').textContent = this.value" style="flex:1;">
+    <span id="threshold-val" style="font-weight:600; color: var(--primary); min-width: 40px;">{{ threshold }}</span>
+    <button type="submit" class="btn-refresh"><i class="bi bi-check-lg"></i> החל</button>
+</form>
+
+<div class="chart-card">
+    <h3><i class="bi bi-bar-chart-fill"></i> שיעורים לפי נושא (15 המובילים)</h3>
+    <div class="chart-container tall"><canvas id="topicsChart"></canvas></div>
+</div>
+
+<div class="chart-card">
+    <h3><i class="bi bi-collection"></i> קבוצות נושאים</h3>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>נושא מייצג</th>
+                <th>וריאציות נוספות</th>
+                <th>שיעורים</th>
+                <th>מתגברים</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for g in groups %}
+            <tr>
+                <td><strong>{{ g.topic }}</strong></td>
+                <td>
+                    {% if g.variants %}
+                        {% for v in g.variants %}<span class="badge-soft orange" style="margin-left: 4px;">{{ v }}</span>{% endfor %}
+                    {% else %}<span style="color: var(--text-muted);">—</span>{% endif %}
+                </td>
+                <td><span class="badge-soft green">{{ g.lessons }}</span></td>
+                <td>
+                    {% for t in g.tutors %}<span class="badge-soft" style="margin-left: 4px;">{{ t }}</span>{% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const chartLabels = {{ chart_labels | safe }};
+    const chartValues = {{ chart_values | safe }};
+
+    new Chart(document.getElementById('topicsChart'), {
+        type: 'bar',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'שיעורים',
+                data: chartValues,
+                backgroundColor: (ctx) => {
+                    const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 400, 0);
+                    gradient.addColorStop(0, 'rgba(99,102,241,0.9)');
+                    gradient.addColorStop(1, 'rgba(236,72,153,0.8)');
+                    return gradient;
+                },
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1 } },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+</script>
+{% endblock %}

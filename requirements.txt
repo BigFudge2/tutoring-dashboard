@@ -1,0 +1,8 @@
+gspread>=6.0
+pandas>=2.0
+rapidfuzz>=3.5
+google-auth>=2.25
+flask>=3.0
+flask-caching>=2.4
+gunicorn>=22.0
+cffi>=1.17

@@ -1,0 +1,12 @@
+# credentials
+*.json
+!.streamlit/*.json
+
+# python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# streamlit
+.streamlit/secrets.toml
