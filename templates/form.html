@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>דיווח שיעור תגבור</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --bg: #f0f2f8;
+            --card-bg: #ffffff;
+            --text: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+        * { font-family: 'Heebo', sans-serif; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .form-wrapper { width: 100%; max-width: 600px; }
+        .form-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .form-header .icon-circle {
+            width: 64px; height: 64px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1.6rem; color: white;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 8px 24px rgba(99,102,241,0.3);
+        }
+        .form-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--text); margin: 0 0 0.25rem; }
+        .form-header p { color: var(--text-muted); font-size: 0.95rem; margin: 0; }
+        .form-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        .form-control, .autocomplete-input {
+            width: 100%; padding: 0.65rem 0.9rem;
+            border: 1px solid var(--border); border-radius: 10px;
+            background: white; font-size: 0.95rem;
+            font-family: 'Heebo', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-control:focus, .autocomplete-input:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .form-label { font-weight: 600; color: var(--text); margin-bottom: 0.35rem; }
+        .autocomplete-list {
+            display: none; position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-top: 4px;
+            z-index: 50; max-height: 240px; overflow-y: auto;
+        }
+        .autocomplete-item {
+            padding: 0.6rem 1rem; cursor: pointer; font-size: 0.93rem; transition: background 0.15s;
+        }
+        .autocomplete-item:hover { background: #eef2ff; color: var(--primary-dark); }
+        .tag {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 0.3rem 0.7rem; border-radius: 999px;
+            font-size: 0.85rem; font-weight: 500;
+            background: #eef2ff; color: #4338ca;
+        }
+        .tag i { cursor: pointer; font-size: 0.8rem; }
+        .tag i:hover { color: #ef4444; }
+        .btn-submit {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #fff; border: none; border-radius: 12px;
+            font-weight: 600; font-size: 1.05rem; padding: 0.75rem; width: 100%;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(99,102,241,0.35); color: #fff;
+        }
+        .btn-submit:disabled { opacity: 0.7; transform: none; }
+        .success-screen { display: none; text-align: center; padding: 2.5rem 1rem; }
+        .success-screen .check-circle {
+            width: 80px; height: 80px;
+            background: linear-gradient(135deg, #10b981, #34d399);
+            border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 2.2rem; color: white; margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(16,185,129,0.3);
+        }
+        .success-screen h2 { font-weight: 700; margin-bottom: 0.5rem; }
+        .success-screen p { color: var(--text-muted); }
+        .flatpickr-input[readonly] { background: white !important; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="form-wrapper">
+        <div class="form-header">
+            <div class="icon-circle"><i class="bi bi-mortarboard-fill"></i></div>
+            <h1>דיווח שיעור תגבור</h1>
+            <p>מלאו את פרטי השיעור – השמות ישלימו אוטומטית</p>
+        </div>
+
+        <div class="form-card" id="form-card">
+            <div id="alert-area"></div>
+            <form id="lesson-form" autocomplete="off">
+                <div class="mb-3">
+                    <label class="form-label">שם מתגבר <span class="text-danger">*</span></label>
+                    <select class="form-control" name="tutor" id="tutor-select" required>
+                        <option value="">בחרו מתגבר...</option>
+                        {% for t in tutors %}
+                        <option value="{{ t }}">{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">תאריך שיעור <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" name="date" id="date-picker" placeholder="בחרו תאריך..." required readonly>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">שעת התחלה <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="start-picker" name="start" placeholder="בחרו שעה..." required readonly>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">שעת סיום <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="end-picker" name="end" placeholder="בחרו שעה..." required readonly>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">שמות סטודנטים <span class="text-danger">*</span></label>
+                    <div id="students-tags" class="d-flex flex-wrap gap-2 mb-2"></div>
+                    <div class="position-relative" data-ac="students">
+                        <input type="text" class="autocomplete-input" id="student-input" placeholder="הקלידו שם סטודנט...">
+                        <div class="autocomplete-list"></div>
+                    </div>
+                    <small class="text-muted">לחצו Enter או בחרו מהרשימה. אפשר גם להוסיף שמות חדשים.</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">נושא השיעור <span class="text-danger">*</span></label>
+                    <select class="form-control" name="topic" id="topic-select" required>
+                        <option value="">בחרו קודם מתגבר...</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">איך היה השיעור?</label>
+                    <div id="rating-picker" class="d-flex gap-2 fs-3" style="cursor:pointer;">
+                        <i class="bi bi-star" data-val="1"></i>
+                        <i class="bi bi-star" data-val="2"></i>
+                        <i class="bi bi-star" data-val="3"></i>
+                        <i class="bi bi-star" data-val="4"></i>
+                        <i class="bi bi-star" data-val="5"></i>
+                    </div>
+                    <input type="hidden" name="rating" value="">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">הערות</label>
+                    <textarea class="form-control" name="notes" rows="3" placeholder="הערות חופשיות..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-submit" id="submit-btn">
+                    <i class="bi bi-send-fill"></i> שלח דיווח
+                </button>
+            </form>
+        </div>
+
+        <div class="form-card success-screen" id="success-screen">
+            <div class="check-circle"><i class="bi bi-check-lg"></i></div>
+            <h2>הדיווח נשלח בהצלחה!</h2>
+            <p>תודה רבה, הנתונים נשמרו.</p>
+            <button class="btn btn-submit mt-3" onclick="resetForm()" style="max-width:280px;margin:0 auto;">
+                <i class="bi bi-plus-circle"></i> דיווח נוסף
+            </button>
+        </div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/he.js"></script>
+<script>
+(function() {
+    // --- Flatpickr date ---
+    flatpickr('#date-picker', {
+        locale: 'he',
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: 'j F Y',
+        maxDate: 'today',
+        disableMobile: true,
+    });
+
+    // --- Time pickers ---
+    flatpickr('#start-picker', {
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: 'H:i',
+        time_24hr: true,
+        minuteIncrement: 5,
+        disableMobile: true,
+    });
+    flatpickr('#end-picker', {
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: 'H:i',
+        time_24hr: true,
+        minuteIncrement: 5,
+        disableMobile: true,
+    });
+    const DATA = {
+        students: {{ students | tojson }},
+    };
+    const TUTOR_SUBJECTS = {{ tutor_subjects_json | safe }};
+    const selectedStudents = [];
+
+    // Update topic dropdown when tutor changes
+    const tutorSelect = document.getElementById('tutor-select');
+    const topicSelect = document.getElementById('topic-select');
+    tutorSelect.addEventListener('change', () => {
+        const subjects = TUTOR_SUBJECTS[tutorSelect.value] || [];
+        topicSelect.innerHTML = '<option value="">בחרו נושא...</option>';
+        subjects.forEach(s => {
+            topicSelect.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+        if (!subjects.length && tutorSelect.value) {
+            topicSelect.innerHTML = '<option value="">אין מקצועות רשומים למתגבר זה</option>';
+        }
+    });
+
+    document.querySelectorAll('[data-ac]').forEach(wrapper => {
+        const key = wrapper.dataset.ac;
+        const input = wrapper.querySelector('.autocomplete-input');
+        const list  = wrapper.querySelector('.autocomplete-list');
+        const items = DATA[key] || [];
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            if (!q) { list.style.display = 'none'; return; }
+            const matches = items.filter(i => i.includes(q)).slice(0, 12);
+            if (!matches.length) { list.style.display = 'none'; return; }
+            list.innerHTML = matches.map(m => `<div class="autocomplete-item">${m}</div>`).join('');
+            list.style.display = 'block';
+        });
+        list.addEventListener('click', e => {
+            if (!e.target.classList.contains('autocomplete-item')) return;
+            const val = e.target.textContent;
+            if (key === 'students') { addStudent(val); input.value = ''; }
+            else { input.value = val; }
+            list.style.display = 'none';
+        });
+        input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+        if (key === 'students') {
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const v = input.value.trim();
+                    if (v) { addStudent(v); input.value = ''; list.style.display = 'none'; }
+                }
+            });
+        }
+    });
+
+    const tagsContainer = document.getElementById('students-tags');
+    function addStudent(name) {
+        if (selectedStudents.includes(name)) return;
+        selectedStudents.push(name);
+        renderTags();
+    }
+    function removeStudent(name) {
+        const idx = selectedStudents.indexOf(name);
+        if (idx > -1) selectedStudents.splice(idx, 1);
+        renderTags();
+    }
+    function renderTags() {
+        tagsContainer.innerHTML = selectedStudents.map(s =>
+            `<span class="tag">${s}
+                <i class="bi bi-x-circle-fill"
+                   onclick="window.__removeStudent('${s.replace(/'/g, "\\'")}')"></i>
+            </span>`
+        ).join('');
+    }
+    window.__removeStudent = removeStudent;
+
+    const ratingPicker = document.getElementById('rating-picker');
+    const ratingInput  = document.querySelector('input[name="rating"]');
+    let currentRating  = 0;
+    function updateStars(val) {
+        ratingPicker.querySelectorAll('i').forEach(s => {
+            s.className = parseInt(s.dataset.val) <= val ? 'bi bi-star-fill text-warning' : 'bi bi-star text-muted';
+        });
+    }
+    ratingPicker.querySelectorAll('i').forEach(star => {
+        star.addEventListener('click', () => { currentRating = parseInt(star.dataset.val); ratingInput.value = currentRating; updateStars(currentRating); });
+        star.addEventListener('mouseenter', () => updateStars(parseInt(star.dataset.val)));
+    });
+    ratingPicker.addEventListener('mouseleave', () => updateStars(currentRating));
+
+    document.getElementById('lesson-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> שולח...';
+
+        if (!selectedStudents.length) {
+            showAlert('danger', 'חובה להוסיף לפחות סטודנט אחד');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-fill"></i> שלח דיווח';
+            return;
+        }
+
+        const form = e.target;
+
+        if (!form.start.value || !form.end.value) {
+            showAlert('danger', 'חובה לבחור שעת התחלה ושעת סיום');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-fill"></i> שלח דיווח';
+            return;
+        }
+
+        const payload = {
+            'שם מתגבר': form.tutor.value.trim(),
+            'תאריך שיעור': form.date.value,
+            'שעת התחלה': form.start.value,
+            'שעת סיום': form.end.value,
+            'שמות סטודנטים שנכחו': selectedStudents.join(', '),
+            'נושא השיעור': form.topic.value.trim(),
+            'איך היה השיעור?': form.rating.value,
+            'הערות': form.notes.value.trim(),
+        };
+
+        try {
+            const res = await fetch('/api/submit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            const result = await res.json();
+            if (res.ok) {
+                document.getElementById('form-card').style.display = 'none';
+                document.getElementById('success-screen').style.display = 'block';
+            } else {
+                showAlert('danger', result.error || 'שגיאה בשליחה');
+            }
+        } catch (err) {
+            showAlert('danger', 'שגיאת תקשורת: ' + err.message);
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send-fill"></i> שלח דיווח';
+    });
+
+    function showAlert(type, msg) {
+        const area = document.getElementById('alert-area');
+        area.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert" style="border-radius:12px;">
+            ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+        setTimeout(() => area.innerHTML = '', 5000);
+    }
+
+    window.resetForm = function() {
+        document.getElementById('form-card').style.display = 'block';
+        document.getElementById('success-screen').style.display = 'none';
+        document.getElementById('lesson-form').reset();
+        selectedStudents.length = 0;
+        renderTags();
+        currentRating = 0;
+        updateStars(0);
+        topicSelect.innerHTML = '<option value="">בחרו קודם מתגבר...</option>';
+        // Reset flatpickr
+        ['date-picker', 'start-picker', 'end-picker'].forEach(id => {
+            const fp = document.getElementById(id)._flatpickr;
+            if (fp) fp.clear();
+        });
+    };
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

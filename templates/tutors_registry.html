@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block title %}ניהול מתגברים — דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-person-lines-fill" style="color: var(--primary)"></i> ניהול מתגברים</h1>
+        <p>רישום, עריכה ומעקב מתגברים</p>
+    </div>
+    <button class="btn-refresh" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none;" onclick="openAddTutor()">
+        <i class="bi bi-plus-lg"></i> הוסף מתגבר
+    </button>
+</div>
+
+<!-- Filters -->
+<div class="selector-bar">
+    <label><i class="bi bi-funnel"></i> סינון:</label>
+    <select id="filterInst" onchange="filterTable()">
+        <option value="">כל המוסדות</option>
+        {% for inst in institutions %}
+        <option value="{{ inst }}">{{ inst }}</option>
+        {% endfor %}
+    </select>
+    <input type="text" id="filterSearch" class="autocomplete-input" placeholder="חפש מתגבר..." oninput="filterTable()" style="max-width: 250px;">
+</div>
+
+<!-- Tutors Table -->
+<div class="chart-card" style="padding: 0; overflow: hidden;">
+    <table class="data-table" id="tutorsTable">
+        <thead>
+            <tr>
+                <th>שם</th>
+                <th>מוסד</th>
+                <th>מגמה</th>
+                <th>מקצועות</th>
+                <th>סטודנטים על-תנאי</th>
+                <th>טלפון</th>
+                <th>פעולות</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tutors %}
+            <tr data-name="{{ t.name }}" data-inst="{{ t.institution }}">
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="tutor-avatar" style="width:34px; height:34px; font-size:0.85rem;">{{ t.name[0] }}</div>
+                        <strong>{{ t.name }}</strong>
+                    </div>
+                </td>
+                <td>{{ t.institution }}</td>
+                <td>{{ t.track }}</td>
+                <td>
+                    {% for s in t.subjects %}
+                    <span class="badge-soft">{{ s }}</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for ps in t.probation_students %}
+                    <span class="badge-soft orange">{{ ps }}</span>
+                    {% endfor %}
+                </td>
+                <td style="direction: ltr; text-align: right;">{{ t.phone }}</td>
+                <td>
+                    <button class="btn-remove" title="ערוך" onclick='editTutor({{ t|tojson }})'>
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn-remove" title="מחק" onclick="deleteTutor('{{ t.name }}')">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not tutors %}
+            <tr>
+                <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted);">
+                    <i class="bi bi-person-plus" style="font-size: 2rem; display: block; margin-bottom: 0.5rem;"></i>
+                    אין מתגברים רשומים. לחץ "הוסף מתגבר" להתחיל.
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Add/Edit Tutor Modal -->
+<div class="modal-overlay" id="tutorModal">
+    <div class="modal-card" style="max-width: 550px;">
+        <h3><i class="bi bi-person-plus"></i> <span id="tutorModalTitle">הוסף מתגבר</span></h3>
+        <form id="tutorForm" onsubmit="submitTutor(event)">
+            <input type="hidden" id="tutorOriginalName" value="">
+
+            <div class="modal-field">
+                <label>שם מתגבר</label>
+                <input type="text" id="tutorName" placeholder="שם מלא" required>
+            </div>
+
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>מוסד</label>
+                    <select id="tutorInst" onchange="updateTracks()" required>
+                        <option value="">בחר מוסד</option>
+                        {% for inst in institutions %}
+                        <option value="{{ inst }}">{{ inst }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>מגמה</label>
+                    <select id="tutorTrack" required onchange="updateProbationSuggestions()">
+                        <option value="">בחר מוסד קודם</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-field">
+                <label>מקצועות <small style="color: var(--text-muted);">(הפרד בפסיקים)</small></label>
+                <input type="text" id="tutorSubjects" placeholder="אלגברה, חדו״א, פיזיקה">
+            </div>
+
+            <div class="modal-field">
+                <label>סטודנטים על-תנאי</label>
+                <div id="probationSuggestions" style="margin-bottom: 0.5rem; display: none;">
+                    <small style="color: var(--primary); font-weight: 600;">סטודנטים מאותה מגמה:</small>
+                    <div id="probationSuggestList" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem;"></div>
+                </div>
+                <div id="selectedProbation" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem;"></div>
+                <div style="position: relative;">
+                    <input type="text" id="tutorProbation" placeholder="הקלד שם סטודנט להוספה..." autocomplete="off">
+                    <div id="probationAutocomplete" class="autocomplete-list" style="display:none; position:absolute; top:100%; right:0; left:0; z-index:10; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:180px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+                </div>
+                <input type="hidden" id="tutorProbationData">
+            </div>
+
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>טלפון</label>
+                    <input type="tel" id="tutorPhone" placeholder="050-0000000" dir="ltr">
+                </div>
+                <div class="modal-field">
+                    <label>הערות</label>
+                    <input type="text" id="tutorNotes" placeholder="הערות (אופציונלי)">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="modal-btn" onclick="closeTutorModal()">ביטול</button>
+                <button type="submit" class="modal-btn primary" id="tutorSubmitBtn">שמור</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const INSTITUTIONS = {{ institutions|tojson }};
+const PROBATION_STUDENTS = {{ probation_students|tojson }};
+let selectedProbationStudents = [];
+
+function updateTracks() {
+    const inst = document.getElementById('tutorInst').value;
+    const trackSelect = document.getElementById('tutorTrack');
+    trackSelect.innerHTML = '';
+    if (!inst || !INSTITUTIONS[inst]) {
+        trackSelect.innerHTML = '<option value="">בחר מוסד קודם</option>';
+        return;
+    }
+    INSTITUTIONS[inst].forEach(track => {
+        const opt = document.createElement('option');
+        opt.value = track;
+        opt.textContent = track;
+        trackSelect.appendChild(opt);
+    });
+    updateProbationSuggestions();
+}
+
+function updateProbationSuggestions() {
+    const inst = document.getElementById('tutorInst').value;
+    const track = document.getElementById('tutorTrack').value;
+    const sugBox = document.getElementById('probationSuggestions');
+    const sugList = document.getElementById('probationSuggestList');
+    if (!inst || !track) { sugBox.style.display = 'none'; return; }
+    const matching = PROBATION_STUDENTS.filter(s =>
+        s.institution && s.institution === inst &&
+        s.track && s.track === track &&
+        !selectedProbationStudents.includes(s.name)
+    );
+    if (matching.length === 0) { sugBox.style.display = 'none'; return; }
+    sugBox.style.display = 'block';
+    sugList.innerHTML = matching.map(s => {
+        const label = s.name + (s.track ? ` (${s.track})` : '');
+        return `<span class="badge-soft" style="cursor:pointer; background:#dbeafe; color:#1e40af; padding: 0.25rem 0.6rem; border-radius: 20px; font-size: 0.82rem;" onclick="addProbationStudent('${s.name.replace(/'/g, "\\'")}')" title="לחץ להוספה">${label} <i class="bi bi-plus-circle"></i></span>`;
+    }).join('');
+}
+
+function addProbationStudent(name) {
+    if (selectedProbationStudents.includes(name)) return;
+    selectedProbationStudents.push(name);
+    renderSelectedProbation();
+    updateProbationSuggestions();
+}
+
+function removeProbationStudent(name) {
+    selectedProbationStudents = selectedProbationStudents.filter(n => n !== name);
+    renderSelectedProbation();
+    updateProbationSuggestions();
+}
+
+function renderSelectedProbation() {
+    const container = document.getElementById('selectedProbation');
+    container.innerHTML = selectedProbationStudents.map(name =>
+        `<span class="badge-soft orange" style="padding: 0.25rem 0.6rem; border-radius: 20px; font-size: 0.82rem;">${name} <i class="bi bi-x-circle" style="cursor:pointer; margin-right: 0.2rem;" onclick="removeProbationStudent('${name.replace(/'/g, "\\'")}')"></i></span>`
+    ).join('');
+}
+
+function openAddTutor() {
+    document.getElementById('tutorModalTitle').textContent = 'הוסף מתגבר';
+    document.getElementById('tutorOriginalName').value = '';
+    document.getElementById('tutorForm').reset();
+    document.getElementById('tutorTrack').innerHTML = '<option value="">בחר מוסד קודם</option>';
+    selectedProbationStudents = [];
+    renderSelectedProbation();
+    document.getElementById('probationSuggestions').style.display = 'none';
+    document.getElementById('tutorModal').style.display = 'flex';
+}
+
+function editTutor(t) {
+    document.getElementById('tutorModalTitle').textContent = 'ערוך מתגבר';
+    document.getElementById('tutorOriginalName').value = t.name;
+    document.getElementById('tutorName').value = t.name;
+    document.getElementById('tutorInst').value = t.institution;
+    updateTracks();
+    document.getElementById('tutorTrack').value = t.track;
+    document.getElementById('tutorSubjects').value = (t.subjects || []).join(', ');
+    selectedProbationStudents = (t.probation_students || []).slice();
+    renderSelectedProbation();
+    updateProbationSuggestions();
+    document.getElementById('tutorProbation').value = '';
+    document.getElementById('tutorPhone').value = t.phone || '';
+    document.getElementById('tutorNotes').value = t.notes || '';
+    document.getElementById('tutorModal').style.display = 'flex';
+}
+
+// Allow adding students by typing in the text field
+document.addEventListener('DOMContentLoaded', function() {
+    const probInput = document.getElementById('tutorProbation');
+    probInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            const val = this.value.trim().replace(/,$/,'').trim();
+            if (val) {
+                addProbationStudent(val);
+                this.value = '';
+                document.getElementById('probationAutocomplete').style.display = 'none';
+            }
+        }
+    });
+
+    const acList = document.getElementById('probationAutocomplete');
+    probInput.addEventListener('input', function() {
+        const q = this.value.trim();
+        if (q.length === 0) { acList.style.display = 'none'; return; }
+        const inst = document.getElementById('tutorInst').value;
+        const track = document.getElementById('tutorTrack').value;
+        let pool = PROBATION_STUDENTS.filter(s => !selectedProbationStudents.includes(s.name));
+        if (inst) pool = pool.filter(s => !s.institution || s.institution === inst);
+        if (track) pool = pool.filter(s => !s.track || s.track === track);
+        const matches = pool.filter(s => s.name.includes(q)).slice(0, 8);
+        if (matches.length === 0) { acList.style.display = 'none'; return; }
+        acList.innerHTML = matches.map(s => {
+            const extra = [s.institution, s.track].filter(Boolean).join(' / ');
+            return `<div class="autocomplete-item" style="padding:0.5rem 0.75rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center;" data-name="${s.name}"><span>${s.name}</span>${extra ? `<small style="color:var(--text-muted)">${extra}</small>` : ''}</div>`;
+        }).join('');
+        acList.style.display = 'block';
+    });
+
+    acList.addEventListener('click', function(e) {
+        const item = e.target.closest('.autocomplete-item');
+        if (item) {
+            addProbationStudent(item.dataset.name);
+            probInput.value = '';
+            acList.style.display = 'none';
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#tutorProbation') && !e.target.closest('#probationAutocomplete')) {
+            acList.style.display = 'none';
+        }
+    });
+});
+
+function closeTutorModal() {
+    document.getElementById('tutorModal').style.display = 'none';
+}
+
+async function submitTutor(e) {
+    e.preventDefault();
+    const btn = document.getElementById('tutorSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> שומר...';
+
+    const originalName = document.getElementById('tutorOriginalName').value;
+    const isEdit = !!originalName;
+
+    const subjects = document.getElementById('tutorSubjects').value.split(',').map(s => s.trim()).filter(Boolean);
+    // Also add any remaining text in the probation input
+    const remainingProb = document.getElementById('tutorProbation').value.trim();
+    if (remainingProb) addProbationStudent(remainingProb);
+    const probation = selectedProbationStudents.slice();
+
+    const payload = {
+        name: document.getElementById('tutorName').value.trim(),
+        institution: document.getElementById('tutorInst').value,
+        track: document.getElementById('tutorTrack').value,
+        subjects: subjects,
+        probation_students: probation,
+        phone: document.getElementById('tutorPhone').value.trim(),
+        notes: document.getElementById('tutorNotes').value.trim(),
+    };
+    if (isEdit) payload.original_name = originalName;
+
+    const url = isEdit ? '/api/tutors/update' : '/api/tutors/add';
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) location.reload();
+        else {
+            const err = await res.json();
+            alert(err.error || 'שגיאה');
+            btn.disabled = false;
+            btn.textContent = 'שמור';
+        }
+    } catch(e) {
+        alert('שגיאה: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = 'שמור';
+    }
+}
+
+async function deleteTutor(name) {
+    if (!confirm(`למחוק את ${name}?`)) return;
+    try {
+        const res = await fetch('/api/tutors/remove', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        });
+        if (res.ok) location.reload();
+        else alert('שגיאה במחיקה');
+    } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function filterTable() {
+    const inst = document.getElementById('filterInst').value;
+    const search = document.getElementById('filterSearch').value.trim();
+    const rows = document.querySelectorAll('#tutorsTable tbody tr[data-name]');
+    rows.forEach(row => {
+        const name = row.dataset.name;
+        const rowInst = row.dataset.inst;
+        const matchInst = !inst || rowInst === inst;
+        const matchSearch = !search || name.includes(search);
+        row.style.display = (matchInst && matchSearch) ? '' : 'none';
+    });
+}
+
+// Close modal on outside click
+document.getElementById('tutorModal').addEventListener('click', function(e) {
+    if (e.target === this) closeTutorModal();
+});
+</script>
+{% endblock %}

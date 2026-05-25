@@ -420,6 +420,164 @@
         }
         .empty-state h2 { font-weight: 700; margin-bottom: 0.5rem; }
         .empty-state p { color: var(--text-muted); margin: 0; }
+
+        /* ----------- Autocomplete ----------- */
+        .autocomplete-input {
+            width: 100%;
+            padding: 0.6rem 0.9rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: white;
+            font-size: 0.95rem;
+            font-family: 'Heebo', sans-serif;
+        }
+        .autocomplete-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .autocomplete-list {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: var(--shadow-lg);
+            margin-top: 4px;
+            z-index: 50;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .autocomplete-item {
+            padding: 0.65rem 1rem;
+            cursor: pointer;
+            font-size: 0.93rem;
+            transition: background 0.15s;
+        }
+        .autocomplete-item:hover {
+            background: #eef2ff;
+            color: var(--primary-dark);
+        }
+
+        /* ----------- Probation status ----------- */
+        .probation-status {
+            font-size: 1.2rem;
+            display: inline-flex;
+            align-items: center;
+        }
+        .probation-status.risk { color: #dc2626; }
+        .probation-status.ok { color: #16a34a; }
+
+        /* ----------- Modal ----------- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .modal-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0 0 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .modal-field { margin-bottom: 0.85rem; }
+        .modal-field label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+        }
+        .modal-field input {
+            width: 100%;
+            padding: 0.55rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.93rem;
+            font-family: 'Heebo', sans-serif;
+        }
+        .modal-field input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .modal-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+        .modal-row .modal-field { flex: 1; }
+        .modal-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .modal-btn {
+            padding: 0.55rem 1.25rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            font-family: 'Heebo', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal-btn:hover { box-shadow: var(--shadow); }
+        .modal-btn.primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+        }
+        .modal-btn.primary:hover {
+            box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+        }
+
+        /* ----------- Remove button ----------- */
+        .btn-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .btn-remove:hover {
+            color: #dc2626;
+            background: #fee2e2;
+        }
+
+        /* ----------- Student avatar ----------- */
+        .student-avatar {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -437,17 +595,20 @@
         </div>
 
         <ul class="sidebar-nav">
-            <li><a href="/" class="{% if request.endpoint == 'index' %}active{% endif %}">
-                <i class="bi bi-speedometer2"></i> סקירה כללית
+            <li><a href="/schedule" class="{% if request.endpoint == 'schedule_page' %}active{% endif %}">
+                <i class="bi bi-calendar-week"></i> לוז שבועי
+            </a></li>
+            <li><a href="/tutors-registry" class="{% if request.endpoint == 'tutors_registry_page' %}active{% endif %}">
+                <i class="bi bi-person-lines-fill"></i> מתגברים
             </a></li>
             <li><a href="/tutors" class="{% if request.endpoint == 'tutors_page' %}active{% endif %}">
-                <i class="bi bi-person-badge"></i> מתגברים
+                <i class="bi bi-person-badge"></i> סטטיסטיקת מתגברים
             </a></li>
-            <li><a href="/topics" class="{% if request.endpoint == 'topics_page' %}active{% endif %}">
-                <i class="bi bi-journal-bookmark"></i> נושאים
+            <li><a href="/probation" class="{% if request.endpoint == 'probation_page' %}active{% endif %}">
+                <i class="bi bi-exclamation-triangle"></i> על תנאי
             </a></li>
-            <li><a href="/students" class="{% if request.endpoint == 'students_page' %}active{% endif %}">
-                <i class="bi bi-people"></i> סטודנטים
+            <li><a href="/form" class="{% if request.endpoint == 'form_page' %}active{% endif %}">
+                <i class="bi bi-pencil-square"></i> טופס דיווח
             </a></li>
         </ul>
 

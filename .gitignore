@@ -1,6 +1,8 @@
 # credentials
 *.json
 !.streamlit/*.json
+!class_schedules.json
+!ariel_class_schedules.json
 
 # python
 __pycache__/

@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}על תנאי | דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>סטודנטים על תנאי</h1>
+        <p>מעקב בקרה – חודש {{ current_month }}</p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+        <button class="btn-refresh" onclick="document.getElementById('add-modal').style.display='flex'">
+            <i class="bi bi-plus-lg"></i> הוסף סטודנט
+        </button>
+        <a href="#" class="btn-refresh" onclick="refreshData(); return false;">
+            <i class="bi bi-arrow-clockwise"></i> רענן
+        </a>
+    </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-icon grad-orange"><i class="bi bi-exclamation-triangle-fill"></i></div>
+        <div class="kpi-label">סה"כ על תנאי</div>
+        <div class="kpi-value">{{ total_probation }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon" style="background: linear-gradient(135deg, #ef4444, #f87171);"><i class="bi bi-x-circle-fill"></i></div>
+        <div class="kpi-label">בסיכון (לא עומדים ביעד)</div>
+        <div class="kpi-value" style="color: #dc2626;">{{ at_risk_count }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-green"><i class="bi bi-check-circle-fill"></i></div>
+        <div class="kpi-label">עומדים ביעד</div>
+        <div class="kpi-value" style="color: #16a34a;">{{ total_probation - at_risk_count }}</div>
+    </div>
+</div>
+
+{% if students %}
+<div class="chart-card">
+    <h3><i class="bi bi-people-fill"></i> רשימת סטודנטים על תנאי</h3>
+    <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>סטטוס</th>
+                    <th>שם סטודנט</th>
+                    <th>מוסד</th>
+                    <th>מגמה</th>
+                    <th>סיבה</th>
+                    <th>שיעורים החודש</th>
+                    <th>יעד חודשי</th>
+                    <th>סה"כ שיעורים</th>
+                    <th>שעות</th>
+                    <th>ימים מאז שיעור אחרון</th>
+                    <th>הערות</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in students %}
+                <tr>
+                    <td>
+                        {% if s.is_at_risk %}
+                        <span class="probation-status risk"><i class="bi bi-x-circle-fill"></i></span>
+                        {% else %}
+                        <span class="probation-status ok"><i class="bi bi-check-circle-fill"></i></span>
+                        {% endif %}
+                    </td>
+                    <td style="cursor: pointer;" onclick="toggleLessons('lessons-{{ loop.index }}')">
+                        <div style="display: flex; align-items: center; gap: 0.65rem;">
+                            <div class="student-avatar">{{ s.name[:1] }}</div>
+                            <strong>{{ s.name }}</strong>
+                            {% if s.total_lessons > 0 %}
+                            <i class="bi bi-chevron-down toggle-icon" id="icon-lessons-{{ loop.index }}" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.2s;"></i>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>{{ s.institution or '—' }}</td>
+                    <td>{{ s.track or '—' }}</td>
+                    <td>{{ s.reason or '—' }}</td>
+                    <td>
+                        {% if s.is_at_risk %}
+                        <span class="badge-soft" style="background: #fee2e2; color: #dc2626;">{{ s.lessons_this_month }}</span>
+                        {% else %}
+                        <span class="badge-soft green">{{ s.lessons_this_month }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.min_lessons > 0 %}
+                        <span class="badge-soft">{{ s.min_lessons }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ s.total_lessons }}</td>
+                    <td>{{ s.total_hours }}</td>
+                    <td>
+                        {% if s.days_since is not none %}
+                            {% if s.days_since > 14 %}
+                            <span class="badge-soft" style="background: #fee2e2; color: #dc2626;">{{ s.days_since }} ימים</span>
+                            {% elif s.days_since > 7 %}
+                            <span class="badge-soft orange">{{ s.days_since }} ימים</span>
+                            {% else %}
+                            <span class="badge-soft green">{{ s.days_since }} ימים</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="badge-soft" style="background: #fee2e2; color: #dc2626;">אף פעם</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ s.notes }}">{{ s.notes or '—' }}</td>
+                    <td>
+                        <button class="btn-remove" onclick="removeStudent('{{ s.name }}')" title="הסר מרשימת על תנאי">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% if s.lessons %}
+                <tr id="lessons-{{ loop.index }}" class="lessons-detail-row" style="display: none;">
+                    <td colspan="10" style="padding: 0;">
+                        <div style="background: #f8fafc; padding: 1rem 1.5rem; border-top: 1px solid var(--border);">
+                            <h4 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-muted);">
+                                <i class="bi bi-journal-text"></i> שיעורים של {{ s.name }} ({{ s.lessons|length }})
+                            </h4>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                                <thead>
+                                    <tr style="border-bottom: 2px solid var(--border);">
+                                        <th style="padding: 0.5rem; text-align: right; color: var(--text-muted); font-weight: 500;">תאריך</th>
+                                        <th style="padding: 0.5rem; text-align: right; color: var(--text-muted); font-weight: 500;">מתגבר</th>
+                                        <th style="padding: 0.5rem; text-align: right; color: var(--text-muted); font-weight: 500;">נושא</th>
+                                        <th style="padding: 0.5rem; text-align: right; color: var(--text-muted); font-weight: 500;">שעות</th>
+                                        <th style="padding: 0.5rem; text-align: right; color: var(--text-muted); font-weight: 500;">דירוג</th>
+                                        <th style="padding: 0.5rem; text-align: right; color: var(--text-muted); font-weight: 500;">הערות</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for l in s.lessons %}
+                                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 0.45rem 0.5rem;">{{ l.date }}</td>
+                                        <td style="padding: 0.45rem 0.5rem;">{{ l.tutor }}</td>
+                                        <td style="padding: 0.45rem 0.5rem;">{{ l.topic }}</td>
+                                        <td style="padding: 0.45rem 0.5rem;">{{ l.start }} – {{ l.end }}</td>
+                                        <td style="padding: 0.45rem 0.5rem;">
+                                            {% if l.rating %}
+                                            {% for i in range(l.rating|int) %}<i class="bi bi-star-fill" style="color: #f59e0b; font-size: 0.75rem;"></i>{% endfor %}
+                                            {% else %}—{% endif %}
+                                        </td>
+                                        <td style="padding: 0.45rem 0.5rem; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ l.notes }}">{{ l.notes or '—' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-clipboard-check"></i>
+    <h2>אין סטודנטים על תנאי</h2>
+    <p>לחץ על "הוסף סטודנט" למעלה כדי להוסיף</p>
+</div>
+{% endif %}
+
+<!-- מודל הוספת סטודנט -->
+<div id="add-modal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <h3><i class="bi bi-person-plus-fill" style="color: var(--primary);"></i> הוספת סטודנט על תנאי</h3>
+        <div class="modal-form">
+            <div class="modal-field">
+                <label>שם סטודנט</label>
+                <div class="autocomplete-wrapper" style="position: relative;">
+                    <input type="text" id="prob-name" class="autocomplete-input" placeholder="הקלד שם..." autocomplete="off">
+                    <div id="prob-autocomplete" class="autocomplete-list"></div>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>סיבה</label>
+                <input type="text" id="prob-reason" placeholder="לדוגמה: ציון נמוך, נוכחות נמוכה...">
+            </div>
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>מוסד</label>
+                    <select id="prob-institution" onchange="updateProbTracks()">
+                        <option value="">בחר מוסד</option>
+                        {% for inst in institutions %}
+                        <option value="{{ inst }}">{{ inst }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>מגמה</label>
+                    <select id="prob-track">
+                        <option value="">בחר מגמה</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>מינימום שיעורים בחודש</label>
+                    <input type="number" id="prob-min" value="4" min="1" max="30">
+                </div>
+                <div class="modal-field">
+                    <label>תאריך התחלה</label>
+                    <input type="date" id="prob-date">
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>הערות</label>
+                <input type="text" id="prob-notes" placeholder="הערות נוספות (אופציונלי)">
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn primary" onclick="submitProbation()">
+                    <i class="bi bi-plus-lg"></i> הוסף
+                </button>
+                <button class="modal-btn" onclick="document.getElementById('add-modal').style.display='none'">ביטול</button>
+            </div>
+            <div id="prob-msg" style="margin-top: 0.75rem; font-size: 0.9rem;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const allStudents = {{ all_known_students | tojson }};
+    const nameInput = document.getElementById('prob-name');
+    const listEl = document.getElementById('prob-autocomplete');
+
+    // Set default date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('prob-date').value = today;
+
+    nameInput.addEventListener('input', function() {
+        const q = this.value.trim();
+        if (q.length === 0) { listEl.style.display = 'none'; return; }
+        const matches = allStudents.filter(s => s.includes(q)).slice(0, 8);
+        if (matches.length === 0) { listEl.style.display = 'none'; return; }
+        listEl.innerHTML = matches.map(n => `<div class="autocomplete-item">${n}</div>`).join('');
+        listEl.style.display = 'block';
+    });
+
+    listEl.addEventListener('click', function(e) {
+        const item = e.target.closest('.autocomplete-item');
+        if (item) { nameInput.value = item.textContent; listEl.style.display = 'none'; }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.autocomplete-wrapper')) listEl.style.display = 'none';
+    });
+})();
+
+const PROB_INSTITUTIONS = {{ institutions|tojson }};
+function updateProbTracks() {
+    const inst = document.getElementById('prob-institution').value;
+    const trackSelect = document.getElementById('prob-track');
+    trackSelect.innerHTML = '';
+    if (!inst || !PROB_INSTITUTIONS[inst]) {
+        trackSelect.innerHTML = '<option value="">בחר מוסד קודם</option>';
+        return;
+    }
+    trackSelect.innerHTML = '<option value="">בחר מגמה</option>';
+    PROB_INSTITUTIONS[inst].forEach(track => {
+        const opt = document.createElement('option');
+        opt.value = track;
+        opt.textContent = track;
+        trackSelect.appendChild(opt);
+    });
+}
+
+function submitProbation() {
+    const name = document.getElementById('prob-name').value.trim();
+    const reason = document.getElementById('prob-reason').value.trim();
+    const institution = document.getElementById('prob-institution').value;
+    const trackVal = document.getElementById('prob-track').value;
+    const minLessons = document.getElementById('prob-min').value;
+    const dateVal = document.getElementById('prob-date').value;
+    const notes = document.getElementById('prob-notes').value.trim();
+    const msg = document.getElementById('prob-msg');
+
+    if (!name) { msg.innerHTML = '<span style="color:#dc2626;">יש להזין שם סטודנט</span>'; return; }
+
+    // Format date to dd/mm/yyyy
+    let formattedDate = '';
+    if (dateVal) {
+        const [y, m, d] = dateVal.split('-');
+        formattedDate = `${d}/${m}/${y}`;
+    }
+
+    msg.innerHTML = '<span style="color:var(--primary);">שולח...</span>';
+    fetch('/api/probation/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            'שם סטודנט': name,
+            'סיבה': reason,
+            'מוסד': institution,
+            'מגמה': trackVal,
+            'תאריך התחלה': formattedDate,
+            'מינימום שיעורים בחודש': minLessons,
+            'הערות': notes
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            msg.innerHTML = `<span style="color:#dc2626;">${data.error}</span>`;
+        }
+    })
+    .catch(() => { msg.innerHTML = '<span style="color:#dc2626;">שגיאה בשליחה</span>'; });
+}
+
+function removeStudent(name) {
+    if (!confirm(`להסיר את "${name}" מרשימת על תנאי?`)) return;
+    fetch('/api/probation/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') location.reload();
+        else alert(data.error);
+    })
+    .catch(() => alert('שגיאה'));
+}
+
+function toggleLessons(id) {
+    const row = document.getElementById(id);
+    if (!row) return;
+    const icon = document.getElementById('icon-' + id);
+    if (row.style.display === 'none') {
+        row.style.display = '';
+        if (icon) icon.style.transform = 'rotate(180deg)';
+    } else {
+        row.style.display = 'none';
+        if (icon) icon.style.transform = '';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,80 @@
+{
+  "_instructions": "Manually fill in the Ariel University schedules by reading the JPEG files in מערכות שעות/אוניברסיטת אריאל/. Each track maps to year, then to a list of events. 'type' must be 'handasa' (gray) for standard blocks and 'handasai' (yellow) for purple/violet blocks. 'day' is one of: ראשון, שני, שלישי, רביעי, חמישי, שישי. Times are 'HH:MM'. Remove this _instructions key when done.",
+  "חשמל": {
+    "א": [
+        {"day": "ראשון", "start": "09:00","end": "13:00", "course": "אינפי 2", "type": "handasa"},
+        {"day": "ראשון", "start": "15:00","end": "17:00", "course": "אינפי 2 תרגיל", "type": "handasa"},
+        {"day": "ראשון", "start": "17:00", "end": "20:00", "course": "משוואות דיפרנציאליות רגילות", "type": "handasa"},
+        {"day": "ראשון", "start": "20:00", "end": "21:00", "course": "משוואות דיפרנציאליות רגילות תרגיל", "type": "handasa"},
+        {"day": "שני", "start": "09:00","end": "12:00", "course": "פיזיקה 2 חשמל", "type": "handasa"},
+        {"day": "שני", "start": "12:00","end": "13:00", "course": "פיזיקה 2 חשמל תרגיל", "type": "handasa"},
+        {"day": "שני", "start": "13:00","end": "16:30", "course": "תורת החשמל ב", "type": "handasai"},
+        {"day": "שני", "start": "17:00","end": "18:30", "course": "תורת החשמל ב תרגיל", "type": "handasai"},
+        {"day": "שלישי", "start": "09:00","end": "12:00", "course": "אנליזה מתקדמת", "type": "handasa"},
+        {"day": "שלישי", "start": "12:00","end": "13:00", "course": "אנליזה מתקדמת תרגיל", "type": "handasa"},
+        {"day": "שלישי", "start": "13:00","end": "16:00", "course": "מבנה מחשבים", "type": "handasa"},
+        {"day": "שלישי", "start": "16:00","end": "17:00", "course": "מבנה מחשבים תרגיל", "type": "handasa"},
+        {"day": "רביעי", "start": "09:00","end": "15:30", "course": "מבוא לאלקטרוניקה", "type": "handasai"},
+        {"day": "חמישי", "start": "09:00","end": "12:30", "course": "מיקרו בקרים א", "type": "handasai"},
+        {"day": "רביעי", "start": "13:00","end": "16:30", "course": "מעבדת מערכות ספרתיות ב", "type": "handasai"}
+    ],
+    "ב": [
+        {"day": "ראשון", "start": "09:00","end": "12:30", "course": "אלקטרוניקה תקבילית", "type": "handasai"},
+        {"day": "ראשון", "start": "13:00","end": "16:30", "course": "מעבדה תקבילית", "type": "handasai"},
+        {"day": "שני", "start": "09:00","end": "12:30", "course": "אלקטרוניקה ספרתית א", "type": "handasai"},
+        {"day": "שני", "start": "13:00","end": "14:30", "course": "מיקרו בקרים ב", "type": "handasai"},
+        {"day": "שני", "start": "15:00","end": "16:30", "course": "מעבדה במיקרו בקרים", "type": "handasai"},
+        {"day": "שלישי", "start": "09:00","end": "10:30", "course": "תקשורת ספרתית א", "type": "handasai"},
+        {"day": "שלישי", "start": "11:00","end": "12:30", "course": "תקשורת אנלוגית", "type": "handasai"},
+        {"day": "שלישי", "start": "13:00","end": "17:00", "course": "גלים ופיזיקה מודרנית", "type": "handasa"},
+        {"day": "שלישי", "start": "17:00","end": "18:00", "course": "גלים ופיזיקה מודרנית תרגיל", "type": "handasa"},
+        {"day": "רביעי", "start": "09:00","end": "12:00", "course": "הסתברות וסטטיסטיקה", "type": "handasa"},
+        {"day": "רביעי", "start": "12:00","end": "13:00", "course": "הסתברות וסטטיסטיקה תרגיל", "type": "handasa"},
+        {"day": "רביעי", "start": "13:00","end": "17:00", "course": "התקני מלמ", "type": "handasa"},
+        {"day": "רביעי", "start": "17:00","end": "18:00", "course": "התקני מלמ תרגיל", "type": "handasa"},
+        {"day": "רביעי", "start": "18:00","end": "20:00", "course": "משוואות דיפרנציאליות חלקיות", "type": "handasa"},
+        {"day": "רביעי", "start": "20:00","end": "21:00", "course": "משוואות דיפרנציאליות חלקיות תרגיל", "type": "handasa"},
+        {"day": "חמישי", "start": "09:00","end": "13:00", "course": "מבוא להנדסת חשמל", "type": "handasa"},
+        {"day": "חמישי", "start": "13:00","end": "15:00", "course": "מבוא להנדסת חשמל תרגיל", "type": "handasa"},
+        {"day": "חמישי", "start": "15:00","end": "18:00", "course": "אותות ומערכות", "type": "handasa"},
+        {"day": "חמישי", "start": "18:00","end": "19:00", "course": "אותות ומערכות תרגיל", "type": "handasa"}
+
+    ]
+  },
+  "מכונות": {
+    "א": [
+        {"day": "שני", "start": "09:00","end": "13:00", "course": "אינפי 1", "type": "handasa"},
+        {"day": "שני", "start": "13:00","end": "15:00", "course": "אינפי 1 תרגיל", "type": "handasa"},
+        {"day": "שלישי", "start": "09:00","end": "12:30", "course": "קורס השלמה בפיזיקה", "type": "handasai"},
+        {"day": "שלישי", "start": "13:00","end": "16:30", "course": "מתמטיקה ב", "type": "handasai"},
+        {"day": "שלישי", "start": "16:45","end": "18:15", "course": "מעבדת חומרים", "type": "handasai"},
+        {"day": "שלישי", "start": "18:30","end": "20:00", "course": "מעבדת חוזק חומרים", "type": "handasai"},
+        {"day": "רביעי", "start": "09:00","end": "12:30", "course": "גרפיקה הנדסית א", "type": "handasai"},
+        {"day": "רביעי", "start": "13:00","end": "16:30", "course": "אנגלית טכנית", "type": "handasai"},
+        {"day": "חמישי", "start": "09:00","end": "12:00", "course": "פיזיקה 1 מכניקה", "type": "handasa"},
+        {"day": "חמישי", "start": "12:00","end": "13:00", "course": "פיזיקה 1 מכניקה תרגיל", "type": "handasa"}
+    ],
+    "ב": [
+        {"day": "ראשון", "start": "17:00","end": "20:30", "course": "חלקי מכונות ב", "type": "handasai"},
+        {"day": "שני", "start": "09:00","end": "12:00", "course": "תהליכי יצור", "type": "handasa"},
+        {"day": "שני", "start": "12:00","end": "15:00", "course": "מכניקת הזורמים 1", "type": "handasa"},
+        {"day": "שני", "start": "15:00","end": "16:00", "course": "מכניקת הזורמים 1 תרגיל", "type": "handasa"},
+        {"day": "שני", "start": "16:00","end": "18:00", "course": "מערכות לינאריות תרגיל", "type": "handasa"},
+        {"day": "שלישי", "start": "09:00","end": "12:00", "course": "משוואות דיפרנציאליות חלקיות", "type": "handasa"},
+        {"day": "שלישי", "start": "12:00","end": "13:00", "course": "משוואות דיפרנציאליות חלקיות תרגיל", "type": "handasa"},
+        {"day": "שלישי", "start": "13:00","end": "16:00", "course": "חוזק חומרים 2", "type": "handasa"},
+        {"day": "שלישי", "start": "16:00","end": "17:00", "course": "חוזק חומרים 2 תרגיל", "type": "handasa"},
+        {"day": "שלישי", "start": "16:45","end": "18:15", "course": "מעבדה ברכיבים ומתמרים", "type": "handasai"},
+        {"day": "רביעי", "start": "09:00","end": "12:30", "course": "מערכות בקרה ב", "type": "handasai"},
+        {"day": "רביעי", "start": "13:00","end": "16:30", "course": "בקרים מתונתים וממשק אדם מכונה", "type": "handasai"},
+        {"day": "רביעי", "start": "16:45","end": "18:15", "course": "רכיבים ומתמרים ב", "type": "handasai"},
+        {"day": "רביעי", "start": "18:30","end": "20:00", "course": "מעבדה ברכיבים ומתמרים", "type": "handasai"},
+        {"day": "חמישי", "start": "09:00","end": "13:00", "course": "מערכות לינאריות", "type": "handasa"},
+        {"day": "חמישי", "start": "13:00","end": "16:00", "course": "דינמיקה", "type": "handasa"},
+        {"day": "חמישי", "start": "17:00","end": "18:00", "course": "דינמיקה תרגיל", "type": "handasa"}
+
+
+
+    ]
+  }
+}

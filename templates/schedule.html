@@ -1,0 +1,909 @@
+{% extends "base.html" %}
+{% block title %}לוז שבועי — דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-calendar-week" style="color: var(--primary)"></i> לוז שבועי</h1>
+        <p>תצוגת שבוע — שיעורים מתוכננים, בוצעו ואקסטרה</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="/schedule?date={{ prev_week }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}" class="btn-refresh" title="שבוע קודם">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+        <a href="/schedule?date={{ today }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}" class="btn-refresh">
+            השבוע
+        </a>
+        <a href="/schedule?date={{ next_week }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}" class="btn-refresh" title="שבוע הבא">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        <button class="btn-refresh" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none;" onclick="openAddModal()">
+            <i class="bi bi-plus-lg"></i> הוסף שיעור
+        </button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="selector-bar">
+    <label><i class="bi bi-funnel"></i> סינון:</label>
+    <select id="filterInstitution" onchange="onInstFilterChange()">
+        <option value="">כל המוסדות</option>
+        {% for inst in institutions %}
+        <option value="{{ inst }}" {% if institution_filter == inst %}selected{% endif %}>{{ inst }}</option>
+        {% endfor %}
+    </select>
+    <select id="filterTrack" onchange="applyFilters()">
+        <option value="">כל המגמות</option>
+    </select>
+    <div style="position: relative; flex: 1; min-width: 220px;">
+        <input type="text" id="filterTutor" class="autocomplete-input" placeholder="חפש מתגבר..." value="{{ tutor_filter }}" autocomplete="off">
+        <div class="autocomplete-list" id="tutorFilterList">
+            {% for t in tutor_names %}
+            <div class="autocomplete-item" onclick="selectTutorFilter('{{ t }}')">{{ t }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% if tutor_filter or institution_filter or track_filter %}
+    <a href="/schedule" class="btn-refresh" style="color: var(--danger);">
+        <i class="bi bi-x-lg"></i> נקה סינון
+    </a>
+    {% endif %}
+</div>
+
+<!-- Schedule Grid -->
+<div class="chart-card" style="padding: 0; overflow: hidden;">
+    <div class="schedule-grid">
+        <!-- Header row: days -->
+        <div class="schedule-header">
+            <div class="schedule-time-col"></div>
+            {% for day in matrix.week_dates %}
+            <div class="schedule-day-col {% if day.date == today %}today{% endif %}">
+                <span class="day-name">{{ day.name }}</span>
+                <span class="day-date">{{ day.display }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Body: hours × days -->
+        <div class="schedule-body">
+            {% for hour in matrix.hours %}
+            <div class="schedule-row">
+                <div class="schedule-time-col">{{ '%02d'|format(hour) }}:00</div>
+                {% for day in matrix.week_dates %}
+                <div class="schedule-cell" data-day="{{ day.name }}" data-date="{{ day.date }}" data-hour="{{ hour }}" onclick="onCellClick(this)">
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Lesson Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal-card" style="max-width: 550px;">
+        <h3 id="detailTitle"><i class="bi bi-info-circle"></i> פרטי שיעור</h3>
+        <div id="detailContent"></div>
+        <div class="modal-actions">
+            <button class="modal-btn" onclick="closeDetailModal()">סגור</button>
+            <button class="modal-btn" style="color: var(--danger);" id="detailDeleteBtn" onclick="deleteLesson()">
+                <i class="bi bi-trash"></i> מחק
+            </button>
+            <button class="modal-btn primary" id="detailEditBtn" onclick="editLesson()">
+                <i class="bi bi-pencil"></i> ערוך
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Lesson Modal -->
+<div class="modal-overlay" id="addModal">
+    <div class="modal-card">
+        <h3><i class="bi bi-plus-circle"></i> <span id="addModalTitle">הוסף שיעור</span></h3>
+        <form id="lessonForm" onsubmit="submitLesson(event)">
+            <input type="hidden" id="editId" value="">
+            <input type="hidden" id="editOriginalType" value="">
+
+            <div class="modal-field">
+                <label>מתגבר</label>
+                <div style="position: relative;">
+                    <input type="text" id="lessonTutor" class="autocomplete-input" placeholder="חפש מתגבר..." required autocomplete="off">
+                    <div class="autocomplete-list" id="tutorAddList">
+                        {% for t in tutor_names %}
+                        <div class="autocomplete-item" onclick="selectAddTutor('{{ t }}')">{{ t }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-field">
+                <label>מקצוע</label>
+                <select id="lessonSubject" required>
+                    <option value="">בחר מתגבר קודם</option>
+                </select>
+            </div>
+
+            <div class="modal-field">
+                <label>סוג</label>
+                <div class="d-flex gap-2">
+                    <label class="d-flex align-items-center gap-1" style="cursor: pointer;">
+                        <input type="radio" name="lessonType" value="weekly" checked onchange="toggleLessonType()"> 🔁 שבועי
+                    </label>
+                    <label class="d-flex align-items-center gap-1" style="cursor: pointer;">
+                        <input type="radio" name="lessonType" value="onetime" onchange="toggleLessonType()"> 📌 חד-פעמי
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-field" id="dayField">
+                <label>יום</label>
+                <select id="lessonDay" required>
+                    {% for d in weekdays %}
+                    <option value="{{ d }}">{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="modal-field" id="dateField" style="display: none;">
+                <label>תאריך</label>
+                <input type="date" id="lessonDate">
+            </div>
+
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>שעת התחלה</label>
+                    <input type="time" id="lessonStart" required>
+                </div>
+                <div class="modal-field">
+                    <label>שעת סיום</label>
+                    <input type="time" id="lessonEnd" required>
+                </div>
+            </div>
+
+            <div class="modal-field">
+                <label>הערות</label>
+                <input type="text" id="lessonNotes" placeholder="הערות (אופציונלי)">
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="modal-btn" onclick="closeAddModal()">ביטול</button>
+                <button type="submit" class="modal-btn primary" id="lessonSubmitBtn">שמור</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .schedule-grid { width: 100%; }
+    .schedule-header {
+        display: grid;
+        grid-template-columns: 60px repeat(6, 1fr);
+        border-bottom: 2px solid var(--border);
+        background: #f8fafc;
+    }
+    .schedule-time-col {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-align: center;
+        font-weight: 500;
+        border-left: 1px solid var(--border);
+    }
+    .schedule-day-col {
+        padding: 0.75rem 0.5rem;
+        text-align: center;
+        font-weight: 600;
+        border-left: 1px solid var(--border);
+    }
+    .schedule-day-col.today {
+        background: rgba(99, 102, 241, 0.08);
+    }
+    .schedule-day-col .day-name { display: block; font-size: 0.9rem; color: var(--text); }
+    .schedule-day-col .day-date { display: block; font-size: 0.75rem; color: var(--text-muted); }
+    .schedule-body { position: relative; }
+    .schedule-row {
+        display: grid;
+        grid-template-columns: 60px repeat(6, 1fr);
+        min-height: 50px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .schedule-row:hover { background: #fafbfc; }
+    .schedule-cell {
+        border-left: 1px solid var(--border);
+        position: relative;
+        min-height: 50px;
+        cursor: pointer;
+    }
+    .schedule-cell:hover { background: rgba(99, 102, 241, 0.04); }
+
+    /* Event blocks */
+    .event-block {
+        position: absolute;
+        right: 2px;
+        left: 2px;
+        border-radius: 6px;
+        padding: 3px 6px;
+        font-size: 0.72rem;
+        line-height: 1.3;
+        cursor: pointer;
+        overflow: hidden;
+        z-index: 5;
+        transition: box-shadow 0.2s;
+        border: 1px solid transparent;
+    }
+    .event-block:hover {
+        z-index: 10;
+        box-shadow: var(--shadow-lg);
+    }
+    .event-block.planned {
+        background: #dbeafe;
+        color: #1e40af;
+        border-color: #93c5fd;
+    }
+    .event-block.completed {
+        background: #d1fae5;
+        color: #065f46;
+        border-color: #6ee7b7;
+    }
+    .event-block.extra {
+        background: #fef3c7;
+        color: #92400e;
+        border-color: #fcd34d;
+    }
+    /* Academic class blocks — overlay shown when a track filter is active */
+    .academic-block {
+        position: absolute;
+        right: 2px;
+        left: 2px;
+        border-radius: 6px;
+        padding: 3px 6px;
+        font-size: 0.68rem;
+        line-height: 1.25;
+        z-index: 1;
+        overflow: hidden;
+        border: 1px dashed transparent;
+        opacity: 0.85;
+        pointer-events: none;
+    }
+    .academic-block.handasa {
+        background: #e5e7eb;
+        color: #374151;
+        border-color: #cbd5e1;
+    }
+    .academic-block.handasai {
+        background: #fef9c3;
+        color: #713f12;
+        border-color: #fde047;
+    }
+    .academic-course { font-weight: 600; }
+    .academic-time { opacity: 0.75; font-size: 0.66rem; }
+    .academic-year { float: left; opacity: 0.6; font-size: 0.62rem; }
+    .event-tutor { font-weight: 600; }
+    .event-subject { opacity: 0.85; }
+    .event-time { opacity: 0.7; }
+    .event-icon { float: left; font-size: 0.8rem; }
+
+    /* Legend */
+    .schedule-legend {
+        display: flex;
+        gap: 1.25rem;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        border-top: 1px solid var(--border);
+        background: #fafbfc;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+    .legend-dot {
+        width: 12px; height: 12px;
+        border-radius: 3px;
+    }
+    .legend-dot.blue { background: #93c5fd; }
+    .legend-dot.green { background: #6ee7b7; }
+    .legend-dot.orange { background: #fcd34d; }
+
+    /* Probation attendance */
+    .prob-list { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+    .prob-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0;
+        font-size: 0.88rem;
+    }
+    .prob-check { color: #16a34a; font-weight: 700; }
+    .prob-miss { color: #dc2626; font-weight: 700; }
+
+    /* Detail sections */
+    .detail-section {
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .detail-section:last-child { border-bottom: none; }
+    .detail-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-bottom: 0.15rem; }
+    .detail-value { font-size: 0.95rem; color: var(--text); }
+</style>
+
+<!-- Legend -->
+<div class="schedule-legend" style="background: var(--card-bg); border-radius: 0 0 16px 16px; margin-top: -1.25rem; border: 1px solid var(--border); border-top: none;">
+    <div class="legend-item"><div class="legend-dot blue"></div> מתוכנן</div>
+    <div class="legend-item"><div class="legend-dot green"></div> בוצע</div>
+    <div class="legend-item"><div class="legend-dot orange"></div> אקסטרה / חד-פעמי</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#cbd5e1;"></div> שיעור אקדמי (הנדסה)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fde047;"></div> שיעור אקדמי (הנדסאי)</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EVENTS = {{ schedule_events_json|safe }};
+const ACADEMIC_EVENTS = {{ academic_events_json|safe }};
+const WEEKDAYS = {{ weekdays|tojson }};
+const TUTOR_NAMES = {{ tutor_names|tojson }};
+const TUTOR_SUBJECTS = {{ tutor_subjects_json|safe }};
+let currentEvent = null;
+
+function updateSubjectDropdown(tutorName) {
+    const select = document.getElementById('lessonSubject');
+    select.innerHTML = '';
+    const subjects = TUTOR_SUBJECTS[tutorName] || [];
+    if (subjects.length === 0) {
+        select.innerHTML = '<option value="">בחר מתגבר קודם</option>';
+        return;
+    }
+    subjects.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        select.appendChild(opt);
+    });
+}
+
+// Place events on grid
+function renderEvents() {
+    document.querySelectorAll('.event-block').forEach(el => el.remove());
+
+    const hourStart = {{ matrix.hours[0] }};
+
+    // Group events by day and detect overlaps
+    const dayGroups = {};
+    EVENTS.forEach(ev => {
+        const dayIdx = WEEKDAYS.indexOf(ev.day);
+        if (dayIdx < 0) return;
+        if (!dayGroups[dayIdx]) dayGroups[dayIdx] = [];
+
+        const useReport = ev.status === 'completed' && ev.report;
+        const startStr = useReport ? ev.report.start : ev.start;
+        const endStr = useReport ? ev.report.end : ev.end;
+        const startH = parseInt(startStr.split(':')[0], 10);
+        const startM = parseInt(startStr.split(':')[1] || '0', 10);
+        const endH = parseInt(endStr.split(':')[0], 10);
+        const endM = parseInt(endStr.split(':')[1] || '0', 10);
+        const startMin = startH * 60 + startM;
+        const endMin = endH * 60 + endM;
+
+        dayGroups[dayIdx].push({ ev, startStr, endStr, startH, startM, endH, endM, startMin, endMin, dayIdx });
+    });
+
+    // For each day, find overlap groups and assign columns
+    Object.values(dayGroups).forEach(group => {
+        group.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+        // Build overlap groups (connected components)
+        const overlaps = (a, b) => a.startMin < b.endMin && b.startMin < a.endMin;
+        const overlapGroups = [];
+        group.forEach(item => {
+            let foundGroup = null;
+            for (const og of overlapGroups) {
+                if (og.some(member => overlaps(member, item))) {
+                    foundGroup = og;
+                    break;
+                }
+            }
+            if (foundGroup) foundGroup.push(item);
+            else overlapGroups.push([item]);
+        });
+
+        // Within each overlap group, assign columns
+        overlapGroups.forEach(og => {
+            og.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+            const columns = [];
+            og.forEach(item => {
+                let placed = false;
+                for (let c = 0; c < columns.length; c++) {
+                    const lastInCol = columns[c][columns[c].length - 1];
+                    if (item.startMin >= lastInCol.endMin) {
+                        columns[c].push(item);
+                        item.col = c;
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    item.col = columns.length;
+                    columns.push([item]);
+                }
+            });
+            const totalCols = columns.length;
+            og.forEach(item => { item.totalCols = totalCols; });
+        });
+    });
+
+    // Render all events
+    const allItems = Object.values(dayGroups).flat();
+    allItems.forEach(item => {
+        const { ev, startStr, endStr, startH, startM, endH, endM, dayIdx } = item;
+        const totalCols = item.totalCols || 1;
+        const col = item.col || 0;
+
+        const rows = document.querySelectorAll('.schedule-row');
+        const rowIdx = startH - hourStart;
+        if (rowIdx < 0 || rowIdx >= rows.length) return;
+
+        const cell = rows[rowIdx].querySelectorAll('.schedule-cell')[dayIdx];
+        if (!cell) return;
+
+        const totalMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+        const height = Math.max(totalMinutes / 60 * 50, 24);
+        const topOffset = (startM / 60) * 50;
+
+        const statusClass = ev.status === 'completed' ? 'completed' : (ev.status === 'extra' ? 'extra' : 'planned');
+        const icon = ev.type === 'weekly' ? '🔁' : (ev.type === 'onetime' ? '📌' : '⚡');
+
+        const colWidth = (100 / totalCols);
+        const colRight = col * colWidth;
+
+        const block = document.createElement('div');
+        block.className = `event-block ${statusClass}`;
+        block.style.top = topOffset + 'px';
+        block.style.height = height + 'px';
+        if (totalCols > 1) {
+            block.style.right = colRight + '%';
+            block.style.left = 'auto';
+            block.style.width = `calc(${colWidth}% - 3px)`;
+        }
+        block.innerHTML = `
+            <span class="event-icon">${icon}</span>
+            <div class="event-tutor">${ev.tutor}</div>
+            <div class="event-subject">${ev.subject}</div>
+            <div class="event-time">${startStr.substring(0,5)}-${endStr.substring(0,5)}</div>
+        `;
+        block.onclick = function(e) {
+            e.stopPropagation();
+            showDetail(ev);
+        };
+        cell.appendChild(block);
+    });
+}
+
+// Render academic class blocks (overlay shown when filtering by track).
+// Each event is placed at the same day-column / start-hour cell but on a
+// LOWER z-index than tutoring blocks, so tutoring sessions sit on top.
+// Multiple overlapping academic events on the same day get split into
+// columns (similar to tutoring overlap, but in a separate layer).
+function renderAcademicEvents() {
+    document.querySelectorAll('.academic-block').forEach(el => el.remove());
+    if (!Array.isArray(ACADEMIC_EVENTS) || ACADEMIC_EVENTS.length === 0) return;
+
+    const hourStart = {{ matrix.hours[0] }};
+    const hourEnd = {{ matrix.hours[-1] }} + 1;
+
+    // Group by day & compute overlap columns
+    const dayGroups = {};
+    ACADEMIC_EVENTS.forEach(ev => {
+        const dayIdx = WEEKDAYS.indexOf(ev.day);
+        if (dayIdx < 0) return;
+        const [sh, sm] = ev.start.split(':').map(Number);
+        const [eh, em] = ev.end.split(':').map(Number);
+        const startMin = sh * 60 + sm;
+        const endMin = eh * 60 + em;
+        if (sh >= hourEnd || eh < hourStart) return;
+        if (!dayGroups[dayIdx]) dayGroups[dayIdx] = [];
+        dayGroups[dayIdx].push({ ev, sh, sm, eh, em, startMin, endMin, dayIdx });
+    });
+
+    Object.values(dayGroups).forEach(group => {
+        group.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+        const overlaps = (a, b) => a.startMin < b.endMin && b.startMin < a.endMin;
+        const groups = [];
+        group.forEach(item => {
+            let g = groups.find(g => g.some(m => overlaps(m, item)));
+            if (g) g.push(item); else groups.push([item]);
+        });
+        groups.forEach(og => {
+            const cols = [];
+            og.forEach(item => {
+                let placed = false;
+                for (let c = 0; c < cols.length; c++) {
+                    const last = cols[c][cols[c].length - 1];
+                    if (item.startMin >= last.endMin) { cols[c].push(item); item.col = c; placed = true; break; }
+                }
+                if (!placed) { item.col = cols.length; cols.push([item]); }
+            });
+            og.forEach(item => { item.totalCols = cols.length; });
+        });
+    });
+
+    const rows = document.querySelectorAll('.schedule-row');
+    Object.values(dayGroups).flat().forEach(item => {
+        const { ev, sh, sm, eh, em, dayIdx } = item;
+        const rowIdx = sh - hourStart;
+        if (rowIdx < 0 || rowIdx >= rows.length) return;
+        const cell = rows[rowIdx].querySelectorAll('.schedule-cell')[dayIdx];
+        if (!cell) return;
+
+        const totalMinutes = (eh * 60 + em) - (sh * 60 + sm);
+        const height = Math.max(totalMinutes / 60 * 50, 24);
+        const topOffset = (sm / 60) * 50;
+        const totalCols = item.totalCols || 1;
+        const col = item.col || 0;
+        const colWidth = 100 / totalCols;
+        const colRight = col * colWidth;
+
+        const block = document.createElement('div');
+        block.className = `academic-block ${ev.type === 'handasai' ? 'handasai' : 'handasa'}`;
+        block.style.top = topOffset + 'px';
+        block.style.height = height + 'px';
+        if (totalCols > 1) {
+            block.style.right = colRight + '%';
+            block.style.left = 'auto';
+            block.style.width = `calc(${colWidth}% - 3px)`;
+        }
+        block.title = `${ev.course} (שנה ${ev.year || ''}) ${ev.start}-${ev.end}`;
+        block.innerHTML = `
+            <span class="academic-year">${ev.year ? 'שנה ' + ev.year : ''}</span>
+            <div class="academic-course">${ev.course}</div>
+            <div class="academic-time">${ev.start}-${ev.end}</div>
+        `;
+        cell.appendChild(block);
+    });
+}
+
+function showDetail(ev) {
+    currentEvent = ev;
+    const modal = document.getElementById('detailModal');
+    const content = document.getElementById('detailContent');
+    const statusText = ev.status === 'completed' ? 'בוצע ✅' : (ev.status === 'extra' ? 'אקסטרה ⚡' : 'מתוכנן 📋');
+    const typeText = ev.type === 'weekly' ? 'שבועי 🔁' : (ev.type === 'onetime' ? 'חד-פעמי 📌' : 'אקסטרה');
+
+    let html = `
+        <div class="detail-section">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="detail-label">מתגבר</div>
+                    <div class="detail-value" style="font-weight:700; font-size:1.1rem;">${ev.tutor}</div>
+                </div>
+                <span class="badge-soft ${ev.status === 'completed' ? 'green' : (ev.status === 'extra' ? 'orange' : '')}">${statusText}</span>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="modal-row">
+                <div><div class="detail-label">מקצוע</div><div class="detail-value">${ev.subject}</div></div>
+                <div><div class="detail-label">סוג</div><div class="detail-value">${typeText}</div></div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="modal-row">
+                <div><div class="detail-label">יום</div><div class="detail-value">${ev.day} ${ev.date_display}</div></div>
+                <div><div class="detail-label">שעות (לוז)</div><div class="detail-value">${ev.start.substring(0,5)} - ${ev.end.substring(0,5)}</div></div>
+            </div>
+        </div>`;
+
+    if (ev.institution) {
+        html += `<div class="detail-section"><div class="detail-label">מוסד</div><div class="detail-value">${ev.institution}${ev.track ? ' — ' + ev.track : ''}</div></div>`;
+    }
+
+    if ((ev.status === 'completed' || ev.status === 'extra') && ev.report) {
+        html += `
+        <div class="detail-section" style="background: #f0fdf4; padding: 0.75rem; border-radius: 10px;">
+            <div class="detail-label" style="color: #065f46;">📝 דיווח שנשלח</div>
+            <div class="modal-row" style="margin-top: 0.5rem;">
+                <div><div class="detail-label">שעות בפועל</div><div class="detail-value">${ev.report.start.substring(0,5)} - ${ev.report.end.substring(0,5)}</div></div>
+                <div><div class="detail-label">נושא</div><div class="detail-value">${ev.report.topic}</div></div>
+            </div>`;
+        if (ev.report.students && ev.report.students.length) {
+            html += `<div style="margin-top: 0.5rem;"><div class="detail-label">סטודנטים שהשתתפו</div><div class="detail-value">${ev.report.students.join(', ')}</div></div>`;
+        }
+        if (ev.report.notes) {
+            html += `<div style="margin-top: 0.5rem;"><div class="detail-label">הערות</div><div class="detail-value">${ev.report.notes}</div></div>`;
+        }
+        html += `</div>`;
+    }
+
+    // Probation students attendance
+    if (ev.probation_students && ev.probation_students.length) {
+        html += `<div class="detail-section"><div class="detail-label">סטודנטים על-תנאי</div><ul class="prob-list">`;
+        ev.probation_students.forEach(ps => {
+            if (ev.report && ev.report.probation_attendance) {
+                const attended = ev.report.probation_attendance[ps];
+                html += `<li>${attended ? '<span class="prob-check">✓</span>' : '<span class="prob-miss">✗</span>'} ${ps}</li>`;
+            } else {
+                html += `<li><span style="color: var(--text-muted);">—</span> ${ps}</li>`;
+            }
+        });
+        html += `</ul></div>`;
+    }
+
+    if (ev.notes) {
+        html += `<div class="detail-section"><div class="detail-label">הערות</div><div class="detail-value">${ev.notes}</div></div>`;
+    }
+
+    content.innerHTML = html;
+
+    // Show/hide edit/delete for extra events (no scheduled slot)
+    const canEdit = ev.type !== 'extra';
+    document.getElementById('detailEditBtn').style.display = canEdit ? '' : 'none';
+    document.getElementById('detailDeleteBtn').style.display = canEdit ? '' : 'none';
+
+    modal.style.display = 'flex';
+}
+
+function closeDetailModal() {
+    document.getElementById('detailModal').style.display = 'none';
+    currentEvent = null;
+}
+
+function openAddModal(day, hour) {
+    document.getElementById('addModalTitle').textContent = 'הוסף שיעור';
+    document.getElementById('editId').value = '';
+    document.getElementById('editOriginalType').value = '';
+    document.getElementById('lessonForm').reset();
+
+    if (day) {
+        document.getElementById('lessonDay').value = day;
+    }
+    if (hour !== undefined) {
+        document.getElementById('lessonStart').value = String(hour).padStart(2, '0') + ':00';
+        document.getElementById('lessonEnd').value = String(hour + 1).padStart(2, '0') + ':00';
+    }
+    toggleLessonType();
+    document.getElementById('addModal').style.display = 'flex';
+}
+
+function closeAddModal() {
+    document.getElementById('addModal').style.display = 'none';
+}
+
+function onCellClick(cell) {
+    const day = cell.dataset.day;
+    const hour = parseInt(cell.dataset.hour, 10);
+    openAddModal(day, hour);
+}
+
+function toggleLessonType() {
+    const isWeekly = document.querySelector('input[name="lessonType"]:checked').value === 'weekly';
+    document.getElementById('dayField').style.display = isWeekly ? '' : 'none';
+    document.getElementById('dateField').style.display = isWeekly ? 'none' : '';
+    document.getElementById('lessonDay').required = isWeekly;
+    document.getElementById('lessonDate').required = !isWeekly;
+}
+
+function editLesson() {
+    if (!currentEvent) return;
+    const ev = currentEvent;
+    closeDetailModal();
+
+    document.getElementById('addModalTitle').textContent = 'ערוך שיעור';
+    document.getElementById('editId').value = ev.id || '';
+    document.getElementById('editOriginalType').value = ev.type;
+    document.getElementById('lessonTutor').value = ev.tutor;
+    updateSubjectDropdown(ev.tutor);
+    document.getElementById('lessonSubject').value = ev.subject;
+    document.getElementById('lessonNotes').value = ev.notes || '';
+    document.getElementById('lessonStart').value = ev.start.substring(0, 5);
+    document.getElementById('lessonEnd').value = ev.end.substring(0, 5);
+
+    if (ev.type === 'onetime') {
+        document.querySelector('input[name="lessonType"][value="onetime"]').checked = true;
+        document.getElementById('lessonDate').value = ev.date;
+    } else {
+        document.querySelector('input[name="lessonType"][value="weekly"]').checked = true;
+        document.getElementById('lessonDay').value = ev.day;
+    }
+    toggleLessonType();
+    document.getElementById('addModal').style.display = 'flex';
+}
+
+async function deleteLesson() {
+    if (!currentEvent) return;
+    if (currentEvent.id == null || currentEvent.id === '') {
+        alert('לא ניתן למחוק שיעור ללא מזהה');
+        return;
+    }
+    if (!confirm('למחוק שיעור זה?')) return;
+    const ev = currentEvent;
+    closeDetailModal();
+
+    try {
+        const res = await fetch('/api/schedule/remove', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                id: ev.id,
+                type: ev.type,
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.removed) location.reload();
+        else alert(data.error || 'שגיאה במחיקה');
+    } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function submitLesson(e) {
+    e.preventDefault();
+    const type = document.querySelector('input[name="lessonType"]:checked').value;
+    const editId = document.getElementById('editId').value;
+    const isEdit = !!editId;
+    const tutorName = document.getElementById('lessonTutor').value.trim();
+
+    // Validate tutor is in registry
+    if (!TUTOR_NAMES.includes(tutorName)) {
+        alert('יש לבחור מתגבר רשום מהרשימה');
+        return;
+    }
+
+    const btn = document.getElementById('lessonSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> שומר...';
+
+    const payload = {
+        type: type,
+        tutor: tutorName,
+        subject: document.getElementById('lessonSubject').value.trim(),
+        start: document.getElementById('lessonStart').value,
+        end: document.getElementById('lessonEnd').value,
+        notes: document.getElementById('lessonNotes').value.trim(),
+    };
+
+    if (type === 'weekly') {
+        payload.day = document.getElementById('lessonDay').value;
+    } else {
+        payload.date = document.getElementById('lessonDate').value;
+    }
+
+    const url = isEdit ? '/api/schedule/update' : '/api/schedule/add';
+    if (isEdit) payload.id = editId;
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) location.reload();
+        else {
+            const err = await res.json();
+            alert(err.error || 'שגיאה');
+            btn.disabled = false;
+            btn.textContent = 'שמור';
+        }
+    } catch(e) {
+        alert('שגיאה: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = 'שמור';
+    }
+}
+
+// Autocomplete for filter tutor
+const filterInput = document.getElementById('filterTutor');
+const filterList = document.getElementById('tutorFilterList');
+filterInput.addEventListener('input', function() {
+    const q = this.value.trim();
+    const items = filterList.querySelectorAll('.autocomplete-item');
+    let shown = 0;
+    items.forEach(item => {
+        if (!q || item.textContent.includes(q)) {
+            item.style.display = '';
+            shown++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    filterList.style.display = shown > 0 && q ? 'block' : 'none';
+});
+filterInput.addEventListener('focus', function() {
+    if (this.value) filterList.style.display = 'block';
+});
+
+function selectTutorFilter(name) {
+    filterList.style.display = 'none';
+    applyFiltersWithTutor(name);
+}
+
+const SCHED_INSTITUTIONS = {{ institutions|tojson }};
+
+function populateTrackFilter(selectedTrack) {
+    const inst = document.getElementById('filterInstitution').value;
+    const trackSelect = document.getElementById('filterTrack');
+    trackSelect.innerHTML = '<option value="">כל המגמות</option>';
+    if (inst && SCHED_INSTITUTIONS[inst]) {
+        SCHED_INSTITUTIONS[inst].forEach(track => {
+            const opt = document.createElement('option');
+            opt.value = track;
+            opt.textContent = track;
+            if (track === selectedTrack) opt.selected = true;
+            trackSelect.appendChild(opt);
+        });
+    }
+}
+
+function onInstFilterChange() {
+    populateTrackFilter('');
+    applyFilters();
+}
+
+function applyFilters() {
+    const inst = document.getElementById('filterInstitution').value;
+    const track = document.getElementById('filterTrack').value;
+    let url = '/schedule?';
+    if (inst) url += 'institution=' + encodeURIComponent(inst) + '&';
+    if (track) url += 'track=' + encodeURIComponent(track) + '&';
+    const tutor = document.getElementById('filterTutor').value.trim();
+    if (tutor) url += 'tutor=' + encodeURIComponent(tutor) + '&';
+    location.href = url;
+}
+
+function applyFiltersWithTutor(tutor) {
+    const inst = document.getElementById('filterInstitution').value;
+    const track = document.getElementById('filterTrack').value;
+    let url = '/schedule?';
+    if (inst) url += 'institution=' + encodeURIComponent(inst) + '&';
+    if (track) url += 'track=' + encodeURIComponent(track) + '&';
+    if (tutor) url += 'tutor=' + encodeURIComponent(tutor) + '&';
+    location.href = url;
+}
+
+// Initialize track filter on page load
+populateTrackFilter('{{ track_filter }}');
+
+// Autocomplete for add modal tutor
+const addTutorInput = document.getElementById('lessonTutor');
+const addTutorList = document.getElementById('tutorAddList');
+addTutorInput.addEventListener('input', function() {
+    const q = this.value.trim();
+    const items = addTutorList.querySelectorAll('.autocomplete-item');
+    let shown = 0;
+    items.forEach(item => {
+        if (!q || item.textContent.includes(q)) {
+            item.style.display = '';
+            shown++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    addTutorList.style.display = shown > 0 ? 'block' : 'none';
+});
+addTutorInput.addEventListener('focus', function() {
+    addTutorList.style.display = 'block';
+});
+
+function selectAddTutor(name) {
+    document.getElementById('lessonTutor').value = name;
+    addTutorList.style.display = 'none';
+    updateSubjectDropdown(name);
+}
+
+// Close modals on outside click
+document.getElementById('detailModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDetailModal();
+});
+document.getElementById('addModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAddModal();
+});
+
+// Close autocompletes on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#filterTutor') && !e.target.closest('#tutorFilterList')) {
+        filterList.style.display = 'none';
+    }
+    if (!e.target.closest('#lessonTutor') && !e.target.closest('#tutorAddList')) {
+        addTutorList.style.display = 'none';
+    }
+});
+
+// Render on load
+renderEvents();
+renderAcademicEvents();
+</script>
+{% endblock %}

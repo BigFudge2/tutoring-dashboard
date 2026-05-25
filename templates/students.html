@@ -2,24 +2,17 @@
 {% block title %}סטודנטים | דשבורד תגבורים{% endblock %}
 
 {% block content %}
+{% if selected %}
+{# =================== פרופיל סטודנט בודד =================== #}
 <div class="page-header">
     <div>
-        <h1>חיפוש סטודנט</h1>
-        <p>מעקב פרטני אחר נוכחות סטודנטים</p>
+        <h1><i class="bi bi-person-fill" style="color: var(--primary);"></i> {{ selected }}</h1>
+        <p>פרופיל סטודנט – מעקב נוכחות ופעילות</p>
     </div>
-    <a href="#" class="btn-refresh" onclick="refreshData(); return false;">
-        <i class="bi bi-arrow-clockwise"></i> רענן
+    <a href="/students" class="btn-refresh">
+        <i class="bi bi-arrow-right"></i> חזרה לכל הסטודנטים
     </a>
 </div>
-
-<form class="selector-bar" method="get">
-    <label for="student-select"><i class="bi bi-person-fill"></i> בחר סטודנט:</label>
-    <select id="student-select" name="name" onchange="this.form.submit()">
-        {% for s in students %}
-        <option value="{{ s }}" {% if s == selected %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-    </select>
-</form>
 
 <div class="kpi-grid">
     <div class="kpi-card">
@@ -75,4 +68,134 @@
         </table>
     </div>
 </div>
+
+{% else %}
+{# =================== סקירת כלל הסטודנטים =================== #}
+<div class="page-header">
+    <div>
+        <h1>סטודנטים</h1>
+        <p>מעקב נוכחות – {{ all_students|length }} סטודנטים</p>
+    </div>
+    <a href="#" class="btn-refresh" onclick="refreshData(); return false;">
+        <i class="bi bi-arrow-clockwise"></i> רענן
+    </a>
+</div>
+
+<!-- חיפוש אוטוקומפליט -->
+<div class="selector-bar">
+    <label for="student-search"><i class="bi bi-search"></i> חיפוש סטודנט:</label>
+    <div class="autocomplete-wrapper" style="flex: 1; position: relative;">
+        <input type="text" id="student-search" class="autocomplete-input"
+               placeholder="הקלד שם סטודנט..." autocomplete="off">
+        <div id="autocomplete-list" class="autocomplete-list"></div>
+    </div>
+</div>
+
+<!-- טבלת כל הסטודנטים -->
+<div class="chart-card">
+    <h3><i class="bi bi-people-fill"></i> כל הסטודנטים</h3>
+    <div style="overflow-x: auto;">
+        <table class="data-table" id="students-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>שם סטודנט</th>
+                    <th>שיעורים</th>
+                    <th>שעות</th>
+                    <th>מתגברים</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in all_students %}
+                <tr class="student-row" data-name="{{ s.name }}" onclick="window.location='/students?name={{ s.name }}';" style="cursor: pointer;">
+                    <td>{{ loop.index }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.65rem;">
+                            <div class="student-avatar">{{ s.name[:1] }}</div>
+                            <strong>{{ s.name }}</strong>
+                        </div>
+                    </td>
+                    <td>
+                        {% if s.lessons <= 2 %}
+                        <span class="badge-soft" style="background: #fee2e2; color: #dc2626;">{{ s.lessons }}</span>
+                        {% elif s.lessons <= 5 %}
+                        <span class="badge-soft orange">{{ s.lessons }}</span>
+                        {% else %}
+                        <span class="badge-soft green">{{ s.lessons }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ s.hours }}</td>
+                    <td>{{ s.tutors_count }}</td>
+                    <td><i class="bi bi-chevron-left" style="color: var(--text-muted);"></i></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">אין סטודנטים להצגה</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not selected %}
+<script>
+(function() {
+    const students = {{ students | tojson }};
+    const input = document.getElementById('student-search');
+    const listEl = document.getElementById('autocomplete-list');
+    const rows = document.querySelectorAll('.student-row');
+
+    input.addEventListener('input', function() {
+        const query = this.value.trim();
+        filterTable(query);
+        if (query.length === 0) {
+            listEl.innerHTML = '';
+            listEl.style.display = 'none';
+            return;
+        }
+        const matches = students.filter(s => s.includes(query));
+        renderList(matches.slice(0, 8));
+    });
+
+    function filterTable(query) {
+        rows.forEach(row => {
+            const name = row.getAttribute('data-name');
+            if (!query || name.includes(query)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    function renderList(matches) {
+        if (matches.length === 0) {
+            listEl.innerHTML = '';
+            listEl.style.display = 'none';
+            return;
+        }
+        listEl.innerHTML = matches.map(name =>
+            `<div class="autocomplete-item" data-name="${name}">${name}</div>`
+        ).join('');
+        listEl.style.display = 'block';
+    }
+
+    listEl.addEventListener('click', function(e) {
+        const item = e.target.closest('.autocomplete-item');
+        if (item) {
+            window.location = '/students?name=' + encodeURIComponent(item.getAttribute('data-name'));
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.autocomplete-wrapper')) {
+            listEl.style.display = 'none';
+        }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}
