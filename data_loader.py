@@ -12,40 +12,6 @@ import pandas as pd
 import config
 
 
-# ---------- Cached Google client & spreadsheet ----------
-_cached_client: gspread.Client | None = None
-_cached_spreadsheet: gspread.Spreadsheet | None = None
-
-
-def _get_client() -> gspread.Client:
-    global _cached_client
-    if _cached_client is not None:
-        return _cached_client
-    # ב-Render: משתמשים במשתנה סביבה GOOGLE_CREDENTIALS (JSON כ-string)
-    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
-    if creds_json:
-        _cached_client = gspread.service_account_from_dict(json.loads(creds_json))
-    else:
-        # פיתוח מקומי: קובץ JSON
-        _cached_client = gspread.service_account(filename=str(config.CREDENTIALS_PATH))
-    return _cached_client
-
-
-def _get_spreadsheet() -> gspread.Spreadsheet:
-    """מחזיר את ה-spreadsheet הראשי עם קאשינג."""
-    global _cached_spreadsheet
-    if _cached_spreadsheet is not None:
-        try:
-            # בדיקה שהחיבור עדיין תקין
-            _cached_spreadsheet.title
-            return _cached_spreadsheet
-        except Exception:
-            _cached_spreadsheet = None
-    client = _get_client()
-    _cached_spreadsheet = client.open(config.SHEET_NAME)
-    return _cached_spreadsheet
-
-
 # שמות העמודות הצפויים (בדיוק כפי שהמתגברים רואים בטופס)
 COL_TIMESTAMP = "Timestamp"
 COL_TUTOR = "שם מתגבר"
@@ -100,7 +66,10 @@ def _get_client() -> gspread.Client:
     # ב-Render: משתמשים במשתנה סביבה GOOGLE_CREDENTIALS (JSON כ-string)
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     if creds_json:
-        return gspread.service_account_from_dict(json.loads(creds_json))
+        try:
+            return gspread.service_account_from_dict(json.loads(creds_json))
+        except (json.JSONDecodeError, ValueError):
+            pass
     # פיתוח מקומי: קובץ JSON
     return gspread.service_account(filename=str(config.CREDENTIALS_PATH))
 
@@ -144,7 +113,8 @@ def _split_students(value: Any) -> list[str]:
 
 def load_data() -> pd.DataFrame:
     """קורא את הגיליון ומחזיר DataFrame מעובד."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     worksheet_name = getattr(config, "WORKSHEET_NAME", None)
     if worksheet_name:
         try:
@@ -334,7 +304,8 @@ def get_all_students(df: pd.DataFrame) -> list[str]:
 def load_probation_students() -> list[dict[str, Any]]:
     """קורא את טאב 'על תנאי' מהגיליון ומחזיר רשימת סטודנטים על תנאי."""
     try:
-        spreadsheet = _get_spreadsheet()
+        client = _get_client()
+        spreadsheet = client.open(config.SHEET_NAME)
         worksheet = spreadsheet.worksheet("על תנאי")
     except (gspread.exceptions.WorksheetNotFound, Exception):
         return []
@@ -362,7 +333,8 @@ def load_probation_students() -> list[dict[str, Any]]:
 
 def append_probation_student(student: dict[str, str]) -> None:
     """מוסיף סטודנט על תנאי לטאב 'על תנאי' בגיליון."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     try:
         worksheet = spreadsheet.worksheet("על תנאי")
     except gspread.exceptions.WorksheetNotFound:
@@ -377,7 +349,8 @@ def append_probation_student(student: dict[str, str]) -> None:
 
 def remove_probation_student(student_name: str) -> bool:
     """מסיר סטודנט מטאב 'על תנאי'. מחזיר True אם נמצא ונמחק."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     try:
         worksheet = spreadsheet.worksheet("על תנאי")
     except gspread.exceptions.WorksheetNotFound:
@@ -394,7 +367,8 @@ def remove_probation_student(student_name: str) -> bool:
 
 def _open_tab(tab_name: str) -> gspread.Worksheet:
     """פותח טאב ספציפי בגיליון. יוצר אם לא קיים."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     try:
         return spreadsheet.worksheet(tab_name)
     except gspread.exceptions.WorksheetNotFound:
@@ -478,7 +452,8 @@ def load_tutors_registry() -> list[dict[str, Any]]:
 
 def append_tutor(tutor: dict[str, Any]) -> None:
     """מוסיף מתגבר חדש לטאב 'מתגברים'."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     try:
         ws = spreadsheet.worksheet(config.TUTORS_TAB)
     except gspread.exceptions.WorksheetNotFound:
@@ -591,7 +566,8 @@ def _next_id(ws: gspread.Worksheet) -> str:
 
 def append_schedule_slot(slot: dict[str, Any]) -> str:
     """מוסיף שיעור קבוע חדש. מחזיר את ה-ID שנוצר."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     try:
         ws = spreadsheet.worksheet(config.SCHEDULE_TAB)
     except gspread.exceptions.WorksheetNotFound:
@@ -682,7 +658,8 @@ def load_onetime_lessons() -> list[dict[str, Any]]:
 
 def append_onetime_lesson(lesson: dict[str, Any]) -> str:
     """מוסיף שיעור חד-פעמי. מחזיר ID."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     try:
         ws = spreadsheet.worksheet(config.ONETIME_TAB)
     except gspread.exceptions.WorksheetNotFound:
@@ -762,7 +739,8 @@ def remove_schedule_by_tutor(tutor_name: str) -> int:
 
 def append_row(row: dict[str, str]) -> None:
     """מוסיף שורה חדשה לגיליון ב-Google Sheets."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
     worksheet_name = getattr(config, "WORKSHEET_NAME", None)
     if worksheet_name:
         try:
@@ -817,7 +795,8 @@ def _norm_subject(s: str) -> str:
 
 def load_registrations() -> list[dict[str, Any]]:
     """קורא את כל טאבי ההרשמות ומחזיר רשימה מאוחדת ללא כפילויות."""
-    spreadsheet = _get_spreadsheet()
+    client = _get_client()
+    spreadsheet = client.open(config.SHEET_NAME)
 
     all_regs: list[dict[str, Any]] = []
     for tab_name, (inst, track) in _REGISTRATION_TABS.items():

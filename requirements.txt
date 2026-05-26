@@ -7,3 +7,4 @@ flask-caching>=2.4
 gunicorn>=22.0
 cffi>=1.17
 python-dotenv>=1.0
+openpyxl>=3.1

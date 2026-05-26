@@ -1,10 +1,6 @@
 # credentials
-tutoring-dashboard-*.json
-config.py
-
-# data files - allow class schedules
-!class_schedules.json
-!ariel_class_schedules.json
+*.json
+!.streamlit/*.json
 
 # python
 __pycache__/
@@ -14,3 +10,13 @@ venv/
 
 # streamlit
 .streamlit/secrets.toml
+
+# documents
+*.docx
+*.pdf
+*.xlsx
+*.jpg
+*.jpeg
+*.png
+מסמכים על התוכנית/
+מערכות שעות/

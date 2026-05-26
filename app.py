@@ -7,10 +7,8 @@ from datetime import datetime, timedelta
 from typing import Any
 import os
 
-from dotenv import load_dotenv
-load_dotenv()
-
 import pandas as pd
+from functools import wraps
 from flask import Flask, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_caching import Cache
 
@@ -53,31 +51,32 @@ from topic_matcher import build_topic_map, group_similar_topics
 
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
 cache = Cache(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": config.CACHE_TTL_SECONDS})
 
-# ---------- נתיבים ציבוריים (ללא הגנה) ----------
-PUBLIC_PREFIXES = ("/form", "/api/submit", "/login", "/static")
+# ---------- Auth ----------
+
+# Routes that tutors can access without logging in
+PUBLIC_ENDPOINTS = {"form_page", "api_submit", "api_students", "api_tutors",
+                    "api_topics", "api_tutors_subjects", "login", "static"}
 
 
 @app.before_request
 def require_login():
-    """דורש התחברות לכל הנתיבים חוץ מטופס דיווח ו-login."""
-    if any(request.path.startswith(p) for p in PUBLIC_PREFIXES):
-        return None
-    if session.get("admin"):
-        return None
-    return redirect(url_for("login_page"))
+    if request.endpoint in PUBLIC_ENDPOINTS:
+        return
+    if session.get("authenticated"):
+        return
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
-def login_page():
+def login():
     error = None
     if request.method == "POST":
-        password = request.form.get("password", "")
-        if password == ADMIN_PASSWORD:
-            session["admin"] = True
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["authenticated"] = True
             return redirect("/")
         error = "סיסמה שגויה"
     return render_template("login.html", error=error)
@@ -85,8 +84,9 @@ def login_page():
 
 @app.route("/logout")
 def logout():
-    session.pop("admin", None)
-    return redirect(url_for("login_page"))
+    session.pop("authenticated", None)
+    return redirect(url_for("login"))
+
 
 
 # ---------- Class schedules (academic overlay) ----------
@@ -220,6 +220,24 @@ def _get_onetime() -> list[dict]:
     return data
 
 
+def _get_probation() -> list[dict]:
+    cached = cache.get("probation_list")
+    if cached is not None:
+        return cached
+    data = load_probation_students()
+    cache.set("probation_list", data)
+    return data
+
+
+def _get_registrations() -> list[dict]:
+    cached = cache.get("registrations")
+    if cached is not None:
+        return cached
+    data = load_registrations()
+    cache.set("registrations", data)
+    return data
+
+
 # ---------- Routes ----------
 
 @app.route("/")
@@ -230,7 +248,9 @@ def index():
 @app.route("/tutors")
 def tutors_page():
     df = _get_df()
-    all_tutors = get_unique_tutors(df)
+    lesson_tutors = get_unique_tutors(df)
+    registry_tutors = sorted(t["name"] for t in _get_registry())
+    all_tutors = sorted(set(lesson_tutors) | set(registry_tutors))
     selected = request.args.get("name") or (all_tutors[0] if all_tutors else "")
     tutor_df = df[df[COL_TUTOR] == selected].copy() if COL_TUTOR in df.columns and selected else pd.DataFrame()
 
@@ -269,10 +289,7 @@ def tutors_page():
         topic_labels, topic_values = [], []
 
     # Tutor registry record (subjects + probation students assignment).
-    tutors_registry = cache.get("tutors_registry")
-    if tutors_registry is None:
-        tutors_registry = load_tutors_registry()
-        cache.set("tutors_registry", tutors_registry)
+    tutors_registry = _get_registry()
     tutor_record = next((t for t in tutors_registry if t["name"] == selected), None) or {}
 
     return render_template(
@@ -389,16 +406,10 @@ def students_page():
 @app.route("/probation")
 def probation_page():
     df = _get_df()
-    probation_list = cache.get("probation_list")
-    if probation_list is None:
-        probation_list = load_probation_students()
-        cache.set("probation_list", probation_list)
+    probation_list = _get_probation()
 
     # Load tutors registry once and build student->assignments map.
-    tutors_registry = cache.get("tutors_registry")
-    if tutors_registry is None:
-        tutors_registry = load_tutors_registry()
-        cache.set("tutors_registry", tutors_registry)
+    tutors_registry = _get_registry()
 
     student_assignments: dict[str, list[dict[str, Any]]] = {}
     for tutor in tutors_registry:
@@ -533,8 +544,8 @@ def probation_export():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    probation_list = load_probation_students()
-    tutors_registry = load_tutors_registry()
+    probation_list = _get_probation()
+    tutors_registry = _get_registry()
     student_assignments: dict[str, list[dict[str, Any]]] = {}
     for tutor in tutors_registry:
         ss = tutor.get("student_subjects", {}) or {}
@@ -601,15 +612,9 @@ def probation_export():
 @app.route("/registrations")
 def registrations_page():
     """עמוד הרשמות — כל הסטודנטים שנרשמו דרך הטפסים."""
-    regs = cache.get("registrations")
-    if regs is None:
-        regs = load_registrations()
-        cache.set("registrations", regs)
+    regs = _get_registrations()
 
-    probation_list = cache.get("probation_list")
-    if probation_list is None:
-        probation_list = load_probation_students()
-        cache.set("probation_list", probation_list)
+    probation_list = _get_probation()
     prob_names = {s["name"] for s in probation_list}
 
     registry = _get_registry()
@@ -661,11 +666,11 @@ def registrations_export():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    regs = load_registrations()
-    prob_list = load_probation_students()
+    regs = _get_registrations()
+    prob_list = _get_probation()
     prob_names = {s["name"] for s in prob_list}
 
-    registry = load_tutors_registry()
+    registry = _get_registry()
     student_tutors: dict[str, list[str]] = {}
     for tutor in registry:
         for sname in tutor.get("probation_students", []):
@@ -725,10 +730,10 @@ def api_sync_registrations():
     import auto_scheduler
     import time as _time
 
-    regs = load_registrations()
-    registry = load_tutors_registry()
-    weekly = load_weekly_schedule()
-    prob_list = load_probation_students()
+    regs = _get_registrations()
+    registry = _get_registry()
+    weekly = _get_weekly()
+    prob_list = _get_probation()
     prob_names = {s["name"] for s in prob_list}
 
     # Build set of already-assigned students (both prob + regular)
@@ -835,7 +840,7 @@ def tutors_export():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    tutors_registry = load_tutors_registry()
+    tutors_registry = _get_registry()
 
     wb = Workbook()
     ws = wb.active
@@ -1352,10 +1357,7 @@ def api_schedule_remove():
 def tutors_registry_page():
     registry = _get_registry()
     institutions = config.INSTITUTIONS
-    probation_list = cache.get("probation_list")
-    if probation_list is None:
-        probation_list = load_probation_students()
-        cache.set("probation_list", probation_list)
+    probation_list = _get_probation()
     # Group weekly slots per tutor for the "שיעורים בשבוע" column.
     weekly = _get_weekly()
     weekday_order = {d: i for i, d in enumerate(config.WEEKDAYS)}
@@ -1408,8 +1410,8 @@ def schedule_export():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    weekly = load_weekly_schedule()
-    registry = load_tutors_registry()
+    weekly = _get_weekly()
+    registry = _get_registry()
     tutor_info = {t["name"]: t for t in registry}
     weekday_order = {d: i for i, d in enumerate(config.WEEKDAYS)}
 
@@ -1540,7 +1542,11 @@ def api_tutors_subjects():
     name = request.args.get("name", "").strip()
     if not name:
         return jsonify([])
-    return jsonify(get_tutor_subjects(name))
+    registry = _get_registry()
+    for t in registry:
+        if t["name"] == name:
+            return jsonify(t["subjects"])
+    return jsonify([])
 
 
 @app.route("/api/submit", methods=["POST"])
