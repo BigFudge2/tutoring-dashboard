@@ -9,7 +9,7 @@ CREDENTIALS_PATH = Path(__file__).parent / "tutoring-dashboard-494208-f7c7d9ad1f
 SHEET_NAME = "דיווחי תגבורים"
 
 # שם העמוד (sheet tab) בתוך הגיליון. ברירת המחדל של Google Forms: "Form Responses 1"
-WORKSHEET_NAME = "Form Responses 1"
+WORKSHEET_NAME = "תגובות לטופס 1"
 
 # סף הדמיון לזיהוי נושאים דומים (0-100). גבוה יותר = חיפוש מחמיר יותר
 TOPIC_SIMILARITY_THRESHOLD = 70
