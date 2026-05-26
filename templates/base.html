@@ -309,13 +309,85 @@
             box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
         }
 
+        /* ----------- Mobile overlay ----------- */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 99;
+        }
+
         /* ----------- Mobile ----------- */
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(100%); transition: transform 0.3s; }
+            .sidebar {
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+            }
             .sidebar.open { transform: translateX(0); }
-            .main-content { margin-right: 0; padding: 1.25rem; }
+            .sidebar.open ~ .sidebar-backdrop { display: block; }
+            .main-content { margin-right: 0; padding: 1rem; }
             .mobile-menu-btn { display: block !important; }
+
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 0.75rem;
+            }
+            .page-header > div:last-child,
+            .page-header > a {
+                align-self: stretch;
+            }
+
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.75rem;
+            }
+            .kpi-card { padding: 1rem; }
+            .kpi-card .kpi-value { font-size: 1.5rem; }
+            .kpi-card .kpi-icon { width: 38px; height: 38px; font-size: 1.1rem; }
+
+            .selector-bar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.6rem;
+                padding: 1rem;
+            }
+            .selector-bar select,
+            .selector-bar .autocomplete-input,
+            .selector-bar input[type="text"] {
+                min-width: 0 !important;
+                width: 100%;
+            }
+
+            .chart-container { height: 220px !important; }
+            .chart-container.tall { height: 280px !important; }
+
+            .chart-card { padding: 1rem; }
+            .chart-card h3 { font-size: 0.95rem; }
+
+            .modal-card { width: 95%; padding: 1.25rem; }
+
+            .data-table thead th,
+            .data-table tbody td {
+                padding: 0.6rem 0.5rem;
+                font-size: 0.82rem;
+            }
+
+            .tutor-meta { gap: 0.4rem; font-size: 0.72rem; }
+            .tutor-avatar { width: 34px; height: 34px; font-size: 0.85rem; }
+
+            .btn-refresh { font-size: 0.82rem; padding: 0.45rem 0.75rem; }
         }
+
+        @media (max-width: 576px) {
+            .kpi-grid {
+                grid-template-columns: 1fr;
+            }
+            .main-content { padding: 0.75rem; }
+            .page-header h1 { font-size: 1.3rem; }
+        }
+
         .mobile-menu-btn {
             display: none;
             position: fixed;
@@ -329,6 +401,7 @@
             padding: 0.5rem 0.75rem;
             font-size: 1.2rem;
             box-shadow: var(--shadow);
+            cursor: pointer;
         }
 
         /* ----------- Tutors leaderboard ----------- */
@@ -581,9 +654,10 @@
     </style>
 </head>
 <body>
-    <button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">
+    <button class="mobile-menu-btn" onclick="toggleSidebar()">
         <i class="bi bi-list"></i>
     </button>
+    <div class="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -607,13 +681,18 @@
             <li><a href="/probation" class="{% if request.endpoint == 'probation_page' %}active{% endif %}">
                 <i class="bi bi-exclamation-triangle"></i> על תנאי
             </a></li>
+            <li><a href="/registrations" class="{% if request.endpoint == 'registrations_page' %}active{% endif %}">
+                <i class="bi bi-clipboard-check"></i> הרשמות
+            </a></li>
             <li><a href="/form" class="{% if request.endpoint == 'form_page' %}active{% endif %}">
                 <i class="bi bi-pencil-square"></i> טופס דיווח
             </a></li>
         </ul>
 
         <div class="sidebar-footer">
-            <i class="bi bi-cloud-check"></i> מעודכן אוטומטית מ-Google Sheets
+            <a href="/logout" style="color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.82rem;">
+                <i class="bi bi-box-arrow-right"></i> התנתק
+            </a>
         </div>
     </aside>
 
@@ -631,6 +710,19 @@
         function refreshData() {
             fetch('/refresh').then(() => location.reload());
         }
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.querySelector('.sidebar-backdrop');
+            sidebar.classList.toggle('open');
+            backdrop.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+        }
+        // Close sidebar on nav link click (mobile)
+        document.querySelectorAll('.sidebar-nav a').forEach(a => {
+            a.addEventListener('click', () => {
+                if (window.innerWidth <= 992) toggleSidebar();
+            });
+        });
     </script>
     {% block scripts %}{% endblock %}
 </body>

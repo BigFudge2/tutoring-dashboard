@@ -237,7 +237,7 @@ def parse_braude(pdf_path, track, year):
         for top in row_tops:
             row_words = rows[top]
             time_words = [w for w in row_words if TIME_RANGE_RE.match(w["text"])]
-            if len(time_words) < 2:  # need at least a couple to count as a slot row
+            if not time_words:
                 continue
 
             # Find the course-name row above (~21 pts up, ±6).

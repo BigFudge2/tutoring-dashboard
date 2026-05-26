@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}הרשמות — דשבורד תגבורים{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-clipboard-check" style="color: var(--primary)"></i> הרשמות לתגבורים</h1>
+        <p>סטודנטים שנרשמו דרך הטפסים</p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button onclick="syncRegistrations()" class="btn-refresh" id="btnSync" style="background: var(--primary); color: white; border: none; cursor: pointer;">
+            <i class="bi bi-arrow-repeat"></i> סנכרן הרשמות חדשות
+        </button>
+        <a href="/registrations/export" class="btn-refresh" style="background: #10b981; color: white; border: none;">
+            <i class="bi bi-file-earmark-excel"></i> ייצא לאקסל
+        </a>
+        <a href="/refresh" class="btn-refresh">
+            <i class="bi bi-arrow-clockwise"></i> רענן
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-icon grad-indigo"><i class="bi bi-people"></i></div>
+        <div class="kpi-label">סה"כ נרשמים</div>
+        <div class="kpi-value">{{ total }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-orange"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="kpi-label">על תנאי</div>
+        <div class="kpi-value">{{ prob_count }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-green"><i class="bi bi-person-check"></i></div>
+        <div class="kpi-label">רגילים</div>
+        <div class="kpi-value">{{ regular_count }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon grad-blue"><i class="bi bi-link-45deg"></i></div>
+        <div class="kpi-label">משובצים למתגבר</div>
+        <div class="kpi-value">{{ assigned_count }}</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="selector-bar">
+    <label><i class="bi bi-funnel"></i> סינון:</label>
+    <select id="filterInst" onchange="filterRegs()">
+        <option value="">כל המוסדות</option>
+        {% for inst in institutions %}
+        <option value="{{ inst }}">{{ inst }}</option>
+        {% endfor %}
+    </select>
+    <select id="filterStatus" onchange="filterRegs()">
+        <option value="">כל הסטטוסים</option>
+        <option value="probation">על תנאי</option>
+        <option value="regular">רגיל</option>
+    </select>
+    <input type="text" id="filterSearch" class="autocomplete-input" placeholder="חפש סטודנט..." oninput="filterRegs()" style="max-width: 250px;">
+</div>
+
+<!-- Registrations by institution -->
+{% for group_name, group_regs in by_institution.items() %}
+<div class="chart-card" style="padding: 0; overflow: hidden; margin-bottom: 1.25rem;">
+    <div style="padding: 1rem 1.25rem 0.5rem; border-bottom: 1px solid var(--border);">
+        <h3 style="margin: 0; font-size: 1rem;">
+            <i class="bi bi-building"></i> {{ group_name }}
+            <span class="badge-soft" style="margin-right: 0.5rem;">{{ group_regs|length }} נרשמים</span>
+        </h3>
+    </div>
+    <div style="overflow-x: auto;">
+    <table class="data-table reg-table" data-group="{{ group_name }}">
+        <thead>
+            <tr>
+                <th>שם סטודנט</th>
+                <th>ת.ז.</th>
+                <th>קורסים מבוקשים</th>
+                <th>סטטוס</th>
+                <th>מתגברים משובצים</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in group_regs %}
+            <tr data-name="{{ r.name }}" data-inst="{{ r.institution }}" data-status="{{ 'probation' if r.is_probation else 'regular' }}">
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="tutor-avatar" style="width:30px; height:30px; font-size:0.8rem; background: {{ 'linear-gradient(135deg, #f59e0b, #fbbf24)' if r.is_probation else 'linear-gradient(135deg, #10b981, #34d399)' }};">{{ r.name[0] }}</div>
+                        <strong>{{ r.name }}</strong>
+                    </div>
+                </td>
+                <td style="direction: ltr; text-align: right; font-size: 0.85rem; color: var(--text-muted);">{{ r.id_num }}</td>
+                <td>
+                    {% for c in r.courses %}
+                    <span class="badge-soft" style="margin: 2px;">{{ c }}</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if r.is_probation %}
+                    <span class="badge-soft orange">על תנאי</span>
+                    {% else %}
+                    <span class="badge-soft green">רגיל</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if r.tutors_assigned %}
+                    {% for tname in r.tutors_assigned %}
+                    <span class="badge-soft" style="background:#dbeafe; color:#1e40af; margin: 2px;">{{ tname }}</span>
+                    {% endfor %}
+                    {% else %}
+                    <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endfor %}
+
+{% if not registrations %}
+<div class="chart-card" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+    <i class="bi bi-clipboard-x" style="font-size: 2.5rem; display: block; margin-bottom: 0.75rem;"></i>
+    <p>אין הרשמות עדיין. הסטודנטים ימלאו את הטפסים ויופיעו כאן.</p>
+</div>
+{% endif %}
+
+<!-- Sync Results Modal -->
+<div id="syncModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:var(--card-bg); border-radius:12px; max-width:650px; width:90%; max-height:80vh; overflow-y:auto; padding:1.5rem; box-shadow:0 8px 32px rgba(0,0,0,.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0;"><i class="bi bi-arrow-repeat" style="color:var(--primary)"></i> תוצאות סנכרון</h3>
+            <button onclick="closeSyncModal()" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted);">&times;</button>
+        </div>
+        <div id="syncModalBody"></div>
+        <div style="text-align:left; margin-top:1rem;">
+            <button onclick="closeSyncModal(); location.reload();" class="btn-refresh" style="background:var(--primary); color:white; border:none; cursor:pointer;">סגור ורענן</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterRegs() {
+    const inst = document.getElementById('filterInst').value;
+    const status = document.getElementById('filterStatus').value;
+    const search = document.getElementById('filterSearch').value.trim();
+
+    document.querySelectorAll('.reg-table').forEach(table => {
+        const group = table.dataset.group;
+        const card = table.closest('.chart-card');
+        let visibleCount = 0;
+
+        table.querySelectorAll('tbody tr').forEach(row => {
+            const name = row.dataset.name || '';
+            const rowInst = row.dataset.inst || '';
+            const rowStatus = row.dataset.status || '';
+
+            const matchInst = !inst || rowInst === inst;
+            const matchStatus = !status || rowStatus === status;
+            const matchSearch = !search || name.includes(search);
+
+            const show = matchInst && matchStatus && matchSearch;
+            row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+
+        // Hide entire card if no visible rows and institution filter active
+        if (inst && visibleCount === 0) {
+            card.style.display = 'none';
+        } else {
+            card.style.display = '';
+        }
+    });
+}
+
+async function syncRegistrations() {
+    const btn = document.getElementById('btnSync');
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> מסנכרן...';
+
+    try {
+        const resp = await fetch('/api/sync-registrations', { method: 'POST' });
+        const data = await resp.json();
+        if (data.error) {
+            alert('שגיאה: ' + data.error);
+            return;
+        }
+        const assigned = (data.assigned || []).filter(a => a.tutor);
+        const unmatched = (data.assigned || []).filter(a => !a.tutor);
+        const scheduled = data.scheduled || [];
+
+        let html = '';
+
+        if (!assigned.length && !unmatched.length && !scheduled.length) {
+            html = '<div style="text-align:center; padding:2rem; color:var(--text-muted);"><i class="bi bi-check-circle" style="font-size:2rem; display:block; margin-bottom:.5rem; color:#10b981;"></i>אין סטודנטים חדשים לשיבוץ — הכל מעודכן!</div>';
+        } else {
+            if (assigned.length) {
+                html += '<h4 style="margin:0 0 .5rem;"><i class="bi bi-person-plus" style="color:#10b981;"></i> סטודנטים שובצו</h4>';
+                html += '<table class="data-table" style="margin-bottom:1rem;"><thead><tr><th>סטודנט</th><th>מתגבר</th><th>מקצוע</th></tr></thead><tbody>';
+                for (const a of assigned) {
+                    html += `<tr><td><strong>${a.student}</strong></td><td>${a.tutor}</td><td><span class="badge-soft">${a.subject}</span></td></tr>`;
+                }
+                html += '</tbody></table>';
+            }
+            if (scheduled.length) {
+                html += '<h4 style="margin:0 0 .5rem;"><i class="bi bi-calendar-plus" style="color:var(--primary);"></i> שיעורים חדשים בלוז</h4>';
+                html += '<table class="data-table" style="margin-bottom:1rem;"><thead><tr><th>מתגבר</th><th>יום</th><th>שעה</th><th>מקצוע</th></tr></thead><tbody>';
+                for (const s of scheduled) {
+                    html += `<tr><td><strong>${s.tutor}</strong></td><td>${s.day}</td><td>${s.start}-${s.end}</td><td><span class="badge-soft">${s.subject}</span></td></tr>`;
+                }
+                html += '</tbody></table>';
+            }
+            if (unmatched.length) {
+                html += '<h4 style="margin:0 0 .5rem; color:#ef4444;"><i class="bi bi-exclamation-circle"></i> לא נמצא מתגבר</h4>';
+                html += '<ul style="margin:0; padding-right:1.2rem;">';
+                for (const u of unmatched) {
+                    html += `<li>${u.student}</li>`;
+                }
+                html += '</ul>';
+            }
+        }
+
+        document.getElementById('syncModalBody').innerHTML = html;
+        document.getElementById('syncModal').style.display = 'flex';
+    } catch (e) {
+        alert('שגיאת רשת: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHTML;
+    }
+}
+
+function closeSyncModal() {
+    document.getElementById('syncModal').style.display = 'none';
+}
+</script>
+{% endblock %}

@@ -1,6 +1,8 @@
 # credentials
-*.json
-!.streamlit/*.json
+tutoring-dashboard-*.json
+config.py
+
+# data files - allow class schedules
 !class_schedules.json
 !ariel_class_schedules.json
 

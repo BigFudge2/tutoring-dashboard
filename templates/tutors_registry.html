@@ -7,9 +7,20 @@
         <h1><i class="bi bi-person-lines-fill" style="color: var(--primary)"></i> ניהול מתגברים</h1>
         <p>רישום, עריכה ומעקב מתגברים</p>
     </div>
-    <button class="btn-refresh" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none;" onclick="openAddTutor()">
-        <i class="bi bi-plus-lg"></i> הוסף מתגבר
-    </button>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <a href="/tutors/export" class="btn-refresh" style="background: #10b981; color: white; border: none;">
+            <i class="bi bi-file-earmark-excel"></i> ייצא מתגברים
+        </a>
+        <a href="/schedule/export" class="btn-refresh" style="background: #0ea5e9; color: white; border: none;">
+            <i class="bi bi-calendar-week"></i> ייצא שיעורים שבועיים
+        </a>
+        <button class="btn-refresh" style="background: #f59e0b; color: white; border: none;" onclick="openAutoSchedule()">
+            <i class="bi bi-magic"></i> שיבוץ אוטומטי
+        </button>
+        <button class="btn-refresh" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none;" onclick="openAddTutor()">
+            <i class="bi bi-plus-lg"></i> הוסף מתגבר
+        </button>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -26,14 +37,18 @@
 
 <!-- Tutors Table -->
 <div class="chart-card" style="padding: 0; overflow: hidden;">
+  <div style="overflow-x: auto;">
     <table class="data-table" id="tutorsTable">
         <thead>
             <tr>
                 <th>שם</th>
                 <th>מוסד</th>
                 <th>מגמה</th>
-                <th>מקצועות</th>
+                <th>מקצועות (פוטנציאל)</th>
+                <th>מקצוע בפועל</th>
                 <th>סטודנטים על-תנאי</th>
+                <th>סטודנטים רגילים</th>
+                <th>שיעורים בשבוע</th>
                 <th>טלפון</th>
                 <th>פעולות</th>
             </tr>
@@ -55,9 +70,40 @@
                     {% endfor %}
                 </td>
                 <td>
+                    {% if t.actual_subject %}
+                    <span class="badge-soft" style="background:#ede9fe; color:#5b21b6; font-weight:600;">
+                        {{ t.actual_subject }}
+                    </span>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
                     {% for ps in t.probation_students %}
-                    <span class="badge-soft orange">{{ ps }}</span>
+                    {% set subj = t.student_subjects.get(ps) if t.student_subjects else None %}
+                    {% set subj = subj or t.actual_subject %}
+                    <span class="badge-soft orange" style="display:inline-block; margin:2px;">
+                        {{ ps }}{% if subj %} <span style="opacity:.7;">— {{ subj }}</span>{% endif %}
+                    </span>
                     {% endfor %}
+                </td>
+                <td>
+                    {% for rs in t.regular_students %}
+                    {% set subj = t.regular_subjects.get(rs) if t.regular_subjects else None %}
+                    {% set subj = subj or t.actual_subject %}
+                    <span class="badge-soft green" style="display:inline-block; margin:2px;">
+                        {{ rs }}{% if subj %} <span style="opacity:.7;">— {{ subj }}</span>{% endif %}
+                    </span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if lessons %}
+                        {% for ls in lessons %}
+                        <div style="margin:2px 0;">
+                            <span class="badge-soft" style="background:#dbeafe; color:#1e40af;">
+                                {{ ls.day }} {{ ls.start }}-{{ ls.end }}{% if ls.subject %} — {{ ls.subject }}{% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    {% else %}<span style="color: var(--text-muted);">—</span>{% endif %}
                 </td>
                 <td style="direction: ltr; text-align: right;">{{ t.phone }}</td>
                 <td>
@@ -72,7 +118,7 @@
             {% endfor %}
             {% if not tutors %}
             <tr>
-                <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted);">
+                <td colspan="10" class="text-center" style="padding: 3rem; color: var(--text-muted);">
                     <i class="bi bi-person-plus" style="font-size: 2rem; display: block; margin-bottom: 0.5rem;"></i>
                     אין מתגברים רשומים. לחץ "הוסף מתגבר" להתחיל.
                 </td>
@@ -80,6 +126,22 @@
             {% endif %}
         </tbody>
     </table>
+  </div>
+</div>
+
+<!-- Auto-Schedule Modal -->
+    <div class="modal-card" style="max-width: 760px;">
+        <h3><i class="bi bi-magic" style="color:#f59e0b;"></i> שיבוץ אוטומטי</h3>
+        <div id="autoScheduleBody" style="padding: 0.25rem 0 1rem;">
+            <p style="color: var(--text-muted);">טוען הצעות...</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="modal-btn" onclick="closeAutoSchedule()">סגור</button>
+            <button type="button" class="modal-btn primary" id="autoCommitBtn" onclick="commitAutoSchedule()" style="display:none;">
+                <i class="bi bi-check-lg"></i> שבץ הכל
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Add/Edit Tutor Modal -->
@@ -370,6 +432,75 @@ function filterTable() {
 // Close modal on outside click
 document.getElementById('tutorModal').addEventListener('click', function(e) {
     if (e.target === this) closeTutorModal();
+});
+
+// ---------- Auto-Schedule ----------
+let autoScheduleSuggestions = [];
+
+function openAutoSchedule() {
+    document.getElementById('autoScheduleModal').style.display = 'flex';
+    document.getElementById('autoCommitBtn').style.display = 'none';
+    document.getElementById('autoScheduleBody').innerHTML = '<p style="color: var(--text-muted);">טוען הצעות...</p>';
+    fetch('/api/auto-schedule', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mode: 'preview'})
+    }).then(r => r.json()).then(data => {
+        autoScheduleSuggestions = data.suggestions || [];
+        renderAutoSuggestions();
+    }).catch(e => {
+        document.getElementById('autoScheduleBody').innerHTML = '<p style="color:#dc2626;">שגיאה: ' + e.message + '</p>';
+    });
+}
+
+function renderAutoSuggestions() {
+    const body = document.getElementById('autoScheduleBody');
+    if (!autoScheduleSuggestions.length) {
+        body.innerHTML = '<p style="color: var(--text-muted);">אין מתגברים שצריך לשבץ. ייתכן שכולם כבר משובצים, או שאין סטודנטים על-תנאי / חפיפה בין הכיתות.</p>';
+        return;
+    }
+    let html = `<p style="margin-bottom: 0.75rem;">נמצאו <strong>${autoScheduleSuggestions.length}</strong> שיבוצים אפשריים. השיבוצים נוצרו תוך הימנעות מהתנגשויות עם שיעורי הסטודנטים והכיתות שלהם.</p>`;
+    html += '<div style="max-height: 380px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;"><table class="data-table" style="margin:0;"><thead><tr><th>מתגבר</th><th>יום</th><th>שעות</th><th>מקצוע</th></tr></thead><tbody>';
+    autoScheduleSuggestions.forEach(s => {
+        html += `<tr><td>${s.tutor}</td><td>${s.day}</td><td>${s.start}-${s.end}</td><td>${s.subject || '—'}</td></tr>`;
+    });
+    html += '</tbody></table></div>';
+    body.innerHTML = html;
+    document.getElementById('autoCommitBtn').style.display = '';
+}
+
+function closeAutoSchedule() {
+    document.getElementById('autoScheduleModal').style.display = 'none';
+}
+
+async function commitAutoSchedule() {
+    const btn = document.getElementById('autoCommitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> שומר...';
+    try {
+        const res = await fetch('/api/auto-schedule', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mode: 'commit'})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert(`נוספו ${data.count} שיעורים שבועיים.`);
+            location.reload();
+        } else {
+            alert('שגיאה: ' + (data.error || ''));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> שבץ הכל';
+        }
+    } catch(e) {
+        alert('שגיאה: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> שבץ הכל';
+    }
+}
+
+document.getElementById('autoScheduleModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAutoSchedule();
 });
 </script>
 {% endblock %}

@@ -8,13 +8,13 @@
         <p>תצוגת שבוע — שיעורים מתוכננים, בוצעו ואקסטרה</p>
     </div>
     <div class="d-flex gap-2 align-items-center">
-        <a href="/schedule?date={{ prev_week }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}" class="btn-refresh" title="שבוע קודם">
+        <a href="/schedule?date={{ prev_week }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}" class="btn-refresh" title="שבוע קודם">
             <i class="bi bi-chevron-right"></i>
         </a>
-        <a href="/schedule?date={{ today }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}" class="btn-refresh">
+        <a href="/schedule?date={{ today }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}" class="btn-refresh">
             השבוע
         </a>
-        <a href="/schedule?date={{ next_week }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}" class="btn-refresh" title="שבוע הבא">
+        <a href="/schedule?date={{ next_week }}{% if tutor_filter %}&tutor={{ tutor_filter }}{% endif %}{% if institution_filter %}&institution={{ institution_filter }}{% endif %}{% if track_filter %}&track={{ track_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}" class="btn-refresh" title="שבוע הבא">
             <i class="bi bi-chevron-left"></i>
         </a>
         <button class="btn-refresh" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none;" onclick="openAddModal()">
@@ -32,8 +32,14 @@
         <option value="{{ inst }}" {% if institution_filter == inst %}selected{% endif %}>{{ inst }}</option>
         {% endfor %}
     </select>
-    <select id="filterTrack" onchange="applyFilters()">
+    <select id="filterTrack" onchange="onTrackFilterChange()">
         <option value="">כל המגמות</option>
+    </select>
+    <select id="filterYear" onchange="applyFilters()">
+        <option value="">כל השנים</option>
+        {% for y in available_years %}
+        <option value="{{ y }}" {% if year_filter == y %}selected{% endif %}>שנה {{ y }}</option>
+        {% endfor %}
     </select>
     <div style="position: relative; flex: 1; min-width: 220px;">
         <input type="text" id="filterTutor" class="autocomplete-input" placeholder="חפש מתגבר..." value="{{ tutor_filter }}" autocomplete="off">
@@ -46,6 +52,12 @@
     {% if tutor_filter or institution_filter or track_filter %}
     <a href="/schedule" class="btn-refresh" style="color: var(--danger);">
         <i class="bi bi-x-lg"></i> נקה סינון
+    </a>
+    {% endif %}
+    {% if institution_filter and track_filter %}
+    <a href="/class-schedule/print?institution={{ institution_filter }}&track={{ track_filter }}{% if year_filter %}&year={{ year_filter }}{% endif %}"
+       target="_blank" class="btn-refresh" style="color: var(--primary);">
+        <i class="bi bi-file-earmark-pdf"></i> ייצא PDF
     </a>
     {% endif %}
 </div>
@@ -235,6 +247,20 @@
         z-index: 10;
         box-shadow: var(--shadow-lg);
     }
+    /* Only blocks whose content is clipped expand on hover.
+       IMPORTANT: keep original left/right anchors and don't shrink width —
+       otherwise the cursor can leave the resized block and cause flicker. */
+    .event-block.is-truncated:hover {
+        z-index: 60;
+        overflow: visible;
+        height: auto !important;
+        min-height: 100%;
+        font-size: 0.8rem;
+        padding: 6px 8px;
+        background-clip: padding-box;
+        white-space: normal;
+        word-break: break-word;
+    }
     .event-block.planned {
         background: #dbeafe;
         color: #1e40af;
@@ -263,7 +289,33 @@
         overflow: hidden;
         border: 1px dashed transparent;
         opacity: 0.85;
-        pointer-events: none;
+        cursor: default;
+        transition: opacity 0.15s, box-shadow 0.15s;
+    }
+    .academic-block:hover {
+        z-index: 20;
+        opacity: 1;
+        box-shadow: var(--shadow-lg);
+    }
+    /* Only blocks where content is clipped get the expand-on-hover treatment.
+       Same constraint as event-block — never shrink the horizontal footprint. */
+    .academic-block.is-truncated:hover {
+        z-index: 50;
+        overflow: visible;
+        height: auto !important;
+        min-height: 100%;
+        font-size: 0.78rem;
+        padding: 6px 8px;
+        background-clip: padding-box;
+        white-space: normal;
+        word-break: break-word;
+    }
+    .academic-block.is-truncated:hover .academic-course {
+        font-size: 0.82rem;
+        white-space: normal;
+    }
+    .academic-block.is-truncated:hover .academic-time {
+        font-size: 0.72rem;
     }
     .academic-block.handasa {
         background: #e5e7eb;
@@ -323,6 +375,29 @@
     .detail-section:last-child { border-bottom: none; }
     .detail-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-bottom: 0.15rem; }
     .detail-value { font-size: 0.95rem; color: var(--text); }
+
+    /* Mobile schedule adjustments */
+    @media (max-width: 992px) {
+        .schedule-grid {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .schedule-header,
+        .schedule-row {
+            min-width: 650px;
+        }
+        .schedule-legend {
+            flex-wrap: wrap;
+            gap: 0.5rem 1rem;
+            font-size: 0.75rem;
+        }
+    }
+    @media (max-width: 576px) {
+        .d-flex.gap-2.align-items-center {
+            flex-wrap: wrap;
+            gap: 0.35rem !important;
+        }
+    }
 </style>
 
 <!-- Legend -->
@@ -474,6 +549,14 @@ function renderEvents() {
             showDetail(ev);
         };
         cell.appendChild(block);
+
+        // Mark as truncated only if content overflows — enables hover-expand.
+        requestAnimationFrame(() => {
+            if (block.scrollHeight > block.clientHeight + 1 ||
+                block.scrollWidth > block.clientWidth + 1) {
+                block.classList.add('is-truncated');
+            }
+        });
     });
 }
 
@@ -557,6 +640,15 @@ function renderAcademicEvents() {
             <div class="academic-time">${ev.start}-${ev.end}</div>
         `;
         cell.appendChild(block);
+
+        // Mark as truncated only if content overflows the visible area —
+        // this enables the expand-on-hover effect just for those blocks.
+        requestAnimationFrame(() => {
+            if (block.scrollHeight > block.clientHeight + 1 ||
+                block.scrollWidth > block.clientWidth + 1) {
+                block.classList.add('is-truncated');
+            }
+        });
     });
 }
 
@@ -830,15 +922,28 @@ function populateTrackFilter(selectedTrack) {
 
 function onInstFilterChange() {
     populateTrackFilter('');
+    // Reset year too
+    const ys = document.getElementById('filterYear');
+    if (ys) ys.value = '';
+    applyFilters();
+}
+
+function onTrackFilterChange() {
+    // Reset year when track changes (years list is per track)
+    const ys = document.getElementById('filterYear');
+    if (ys) ys.value = '';
     applyFilters();
 }
 
 function applyFilters() {
     const inst = document.getElementById('filterInstitution').value;
     const track = document.getElementById('filterTrack').value;
+    const yearEl = document.getElementById('filterYear');
+    const year = yearEl ? yearEl.value : '';
     let url = '/schedule?';
     if (inst) url += 'institution=' + encodeURIComponent(inst) + '&';
     if (track) url += 'track=' + encodeURIComponent(track) + '&';
+    if (year) url += 'year=' + encodeURIComponent(year) + '&';
     const tutor = document.getElementById('filterTutor').value.trim();
     if (tutor) url += 'tutor=' + encodeURIComponent(tutor) + '&';
     location.href = url;
@@ -847,9 +952,12 @@ function applyFilters() {
 function applyFiltersWithTutor(tutor) {
     const inst = document.getElementById('filterInstitution').value;
     const track = document.getElementById('filterTrack').value;
+    const yearEl = document.getElementById('filterYear');
+    const year = yearEl ? yearEl.value : '';
     let url = '/schedule?';
     if (inst) url += 'institution=' + encodeURIComponent(inst) + '&';
     if (track) url += 'track=' + encodeURIComponent(track) + '&';
+    if (year) url += 'year=' + encodeURIComponent(year) + '&';
     if (tutor) url += 'tutor=' + encodeURIComponent(tutor) + '&';
     location.href = url;
 }

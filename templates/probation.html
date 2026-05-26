@@ -8,6 +8,9 @@
         <p>מעקב בקרה – חודש {{ current_month }}</p>
     </div>
     <div style="display: flex; gap: 0.5rem;">
+        <a href="/probation/export" class="btn-refresh" style="background: #10b981; color: white;">
+            <i class="bi bi-file-earmark-excel"></i> ייצא ל-Excel
+        </a>
         <button class="btn-refresh" onclick="document.getElementById('add-modal').style.display='flex'">
             <i class="bi bi-plus-lg"></i> הוסף סטודנט
         </button>
@@ -48,6 +51,7 @@
                     <th>מוסד</th>
                     <th>מגמה</th>
                     <th>סיבה</th>
+                    <th>מתגברים משובצים</th>
                     <th>שיעורים החודש</th>
                     <th>יעד חודשי</th>
                     <th>סה"כ שיעורים</th>
@@ -79,6 +83,18 @@
                     <td>{{ s.institution or '—' }}</td>
                     <td>{{ s.track or '—' }}</td>
                     <td>{{ s.reason or '—' }}</td>
+                    <td style="max-width: 240px;">
+                        {% if s.assignments %}
+                            {% for a in s.assignments %}
+                            <div style="margin-bottom: 0.25rem; font-size: 0.82rem;">
+                                <strong>{{ a.tutor }}</strong>
+                                <span style="color: var(--text-muted);">— {{ a.subjects|join(', ') }}</span>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <span style="color: #dc2626; font-size: 0.82rem;">לא משובץ</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if s.is_at_risk %}
                         <span class="badge-soft" style="background: #fee2e2; color: #dc2626;">{{ s.lessons_this_month }}</span>
@@ -115,7 +131,7 @@
                 </tr>
                 {% if s.lessons %}
                 <tr id="lessons-{{ loop.index }}" class="lessons-detail-row" style="display: none;">
-                    <td colspan="10" style="padding: 0;">
+                    <td colspan="11" style="padding: 0;">
                         <div style="background: #f8fafc; padding: 1rem 1.5rem; border-top: 1px solid var(--border);">
                             <h4 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-muted);">
                                 <i class="bi bi-journal-text"></i> שיעורים של {{ s.name }} ({{ s.lessons|length }})

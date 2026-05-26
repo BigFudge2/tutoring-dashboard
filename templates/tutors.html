@@ -66,6 +66,52 @@
     </div>
 </div>
 
+{% if tutor_record %}
+<div class="chart-card" style="border-right: 4px solid #6366f1;">
+    <h3><i class="bi bi-person-badge"></i> שיבוץ ופרטי מתגבר</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
+        <div>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.25rem;">מוסד</div>
+            <div style="font-weight: 600;">{{ tutor_record.institution or '—' }}</div>
+        </div>
+        <div>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.25rem;">מגמה</div>
+            <div style="font-weight: 600;">{{ tutor_record.track or '—' }}</div>
+        </div>
+        <div>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.25rem;">מקצועות</div>
+            <div style="font-weight: 600;">
+                {% if tutor_record.subjects %}
+                    {% for subj in tutor_record.subjects %}
+                    <span class="badge-soft" style="background:#ede9fe; color:#5b21b6; margin-left:0.25rem;">{{ subj }}</span>
+                    {% endfor %}
+                {% else %}—{% endif %}
+            </div>
+        </div>
+        <div>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.25rem;">טלפון</div>
+            <div style="font-weight: 600;">{{ tutor_record.phone or '—' }}</div>
+        </div>
+    </div>
+    <div style="margin-top: 1rem;">
+        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">
+            <i class="bi bi-people-fill"></i> סטודנטים על תנאי משובצים ({{ tutor_record.probation_students|length }})
+        </div>
+        {% if tutor_record.probation_students %}
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            {% for sname in tutor_record.probation_students %}
+            <span class="badge-soft" style="background:#fef3c7; color:#92400e; padding:0.4rem 0.7rem;">
+                <i class="bi bi-person-fill"></i> {{ sname }}
+            </span>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted); font-size: 0.85rem;">אין סטודנטים על תנאי משובצים למתגבר זה</div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="chart-card">
     <h3><i class="bi bi-list-ul"></i> כל השיעורים של {{ selected }}</h3>
     <div style="overflow-x: auto;">

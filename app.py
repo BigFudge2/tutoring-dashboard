@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import json
+import io
 from datetime import datetime, timedelta
 from typing import Any
 import os
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import pandas as pd
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_caching import Cache
 
 import config
@@ -43,12 +47,46 @@ from data_loader import (
     update_onetime_lesson,
     remove_onetime_lesson,
     remove_schedule_by_tutor,
+    load_registrations,
 )
 from topic_matcher import build_topic_map, group_similar_topics
 
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 cache = Cache(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": config.CACHE_TTL_SECONDS})
+
+# ---------- נתיבים ציבוריים (ללא הגנה) ----------
+PUBLIC_PREFIXES = ("/form", "/api/submit", "/login", "/static")
+
+
+@app.before_request
+def require_login():
+    """דורש התחברות לכל הנתיבים חוץ מטופס דיווח ו-login."""
+    if any(request.path.startswith(p) for p in PUBLIC_PREFIXES):
+        return None
+    if session.get("admin"):
+        return None
+    return redirect(url_for("login_page"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    error = None
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == ADMIN_PASSWORD:
+            session["admin"] = True
+            return redirect("/")
+        error = "סיסמה שגויה"
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.pop("admin", None)
+    return redirect(url_for("login_page"))
 
 
 # ---------- Class schedules (academic overlay) ----------
@@ -71,11 +109,12 @@ def _load_class_schedules() -> dict[str, Any]:
     return _class_schedules_cache or {}
 
 
-def _get_academic_events(institution: str | None, track: str | None) -> list[dict[str, Any]]:
+def _get_academic_events(institution: str | None, track: str | None,
+                         year: str | None = None) -> list[dict[str, Any]]:
     """Return academic class events for the given institution+track filter.
 
-    Returns an empty list unless BOTH filters are provided. Aggregates all
-    years for that track.
+    Returns an empty list unless BOTH filters are provided. If `year` is
+    also supplied, only that year's events are returned.
     """
     if not institution or not track:
         return []
@@ -84,8 +123,10 @@ def _get_academic_events(institution: str | None, track: str | None) -> list[dic
     if not isinstance(track_data, dict):
         return []
     events: list[dict[str, Any]] = []
-    for year, evs in track_data.items():
+    for yr, evs in track_data.items():
         if not isinstance(evs, list):
+            continue
+        if year and yr != year:
             continue
         for ev in evs:
             events.append({
@@ -94,10 +135,20 @@ def _get_academic_events(institution: str | None, track: str | None) -> list[dic
                 "end": ev.get("end"),
                 "course": ev.get("course", ""),
                 "type": ev.get("type", "handasa"),
-                "year": year,
+                "year": yr,
                 "kind": "academic",
             })
     return events
+
+
+def _available_years(institution: str | None, track: str | None) -> list[str]:
+    if not institution or not track:
+        return []
+    data = _load_class_schedules()
+    track_data = data.get(institution, {}).get(track, {})
+    if not isinstance(track_data, dict):
+        return []
+    return [y for y, evs in track_data.items() if isinstance(evs, list) and evs]
 
 
 # ---------- Helpers ----------
@@ -217,6 +268,13 @@ def tutors_page():
     else:
         topic_labels, topic_values = [], []
 
+    # Tutor registry record (subjects + probation students assignment).
+    tutors_registry = cache.get("tutors_registry")
+    if tutors_registry is None:
+        tutors_registry = load_tutors_registry()
+        cache.set("tutors_registry", tutors_registry)
+    tutor_record = next((t for t in tutors_registry if t["name"] == selected), None) or {}
+
     return render_template(
         "tutors.html",
         tutors=all_tutors,
@@ -227,6 +285,7 @@ def tutors_page():
         topic_labels=json.dumps(topic_labels, ensure_ascii=False),
         topic_values=json.dumps(topic_values),
         lessons=_df_to_records(tutor_df),
+        tutor_record=tutor_record,
     )
 
 
@@ -335,6 +394,24 @@ def probation_page():
         probation_list = load_probation_students()
         cache.set("probation_list", probation_list)
 
+    # Load tutors registry once and build student->assignments map.
+    tutors_registry = cache.get("tutors_registry")
+    if tutors_registry is None:
+        tutors_registry = load_tutors_registry()
+        cache.set("tutors_registry", tutors_registry)
+
+    student_assignments: dict[str, list[dict[str, Any]]] = {}
+    for tutor in tutors_registry:
+        ss = tutor.get("student_subjects", {}) or {}
+        default_subj = tutor.get("actual_subject", "") or ", ".join(tutor.get("subjects", []))
+        for sname in tutor.get("probation_students", []):
+            subj = ss.get(sname) or default_subj
+            student_assignments.setdefault(sname, []).append({
+                "tutor": tutor["name"],
+                "subjects": [subj] if subj else [],
+                "phone": tutor.get("phone", ""),
+            })
+
     now = datetime.now()
     current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -394,6 +471,7 @@ def probation_page():
             "days_since": days_since,
             "is_at_risk": is_at_risk,
             "lessons": lessons,
+            "assignments": student_assignments.get(name, []),
         })
 
     # מיון: בסיכון קודם, אח"כ לפי שיעורים החודש
@@ -447,6 +525,365 @@ def api_probation_remove():
         return jsonify({"status": "ok", "removed": removed})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/probation/export")
+def probation_export():
+    """ייצוא רשימת סטודנטים על תנאי עם השיבוצים שלהם לקובץ Excel."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    probation_list = load_probation_students()
+    tutors_registry = load_tutors_registry()
+    student_assignments: dict[str, list[dict[str, Any]]] = {}
+    for tutor in tutors_registry:
+        ss = tutor.get("student_subjects", {}) or {}
+        default_subj = tutor.get("actual_subject", "") or ", ".join(tutor.get("subjects", []))
+        for sname in tutor.get("probation_students", []):
+            subj = ss.get(sname) or default_subj
+            student_assignments.setdefault(sname, []).append({
+                "tutor": tutor["name"],
+                "subjects": subj,
+                "phone": tutor.get("phone", ""),
+            })
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "סטודנטים על תנאי"
+    ws.sheet_view.rightToLeft = True
+
+    headers = ["שם סטודנט", "מוסד", "מגמה", "מקצועות שצריך", "מתגברים משובצים",
+               "מקצועות שמכוסים", "מינ' שיעורים בחודש", "תאריך התחלה", "הערות"]
+    ws.append(headers)
+    header_fill = PatternFill("solid", fgColor="6366F1")
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    for student in probation_list:
+        name = student["name"]
+        assignments = student_assignments.get(name, [])
+        tutors_text = "\n".join(f"{a['tutor']} — {a['subjects']}" for a in assignments) if assignments else ""
+        covered = ", ".join(sorted({s.strip() for a in assignments for s in a["subjects"].split(",") if s.strip()}))
+        ws.append([
+            name,
+            student.get("institution", ""),
+            student.get("track", ""),
+            student.get("reason", ""),
+            tutors_text,
+            covered,
+            student.get("min_lessons", ""),
+            student.get("start_date", ""),
+            student.get("notes", ""),
+        ])
+
+    # Column widths
+    widths = [20, 18, 18, 30, 40, 30, 14, 14, 25]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"probation_assignments_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname,
+    )
+
+
+@app.route("/registrations")
+def registrations_page():
+    """עמוד הרשמות — כל הסטודנטים שנרשמו דרך הטפסים."""
+    regs = cache.get("registrations")
+    if regs is None:
+        regs = load_registrations()
+        cache.set("registrations", regs)
+
+    probation_list = cache.get("probation_list")
+    if probation_list is None:
+        probation_list = load_probation_students()
+        cache.set("probation_list", probation_list)
+    prob_names = {s["name"] for s in probation_list}
+
+    registry = _get_registry()
+    # Build student → tutor assignments for all students (prob + regular)
+    student_tutors: dict[str, list[str]] = {}
+    for tutor in registry:
+        for sname in tutor.get("probation_students", []):
+            student_tutors.setdefault(sname, []).append(tutor["name"])
+        for sname in tutor.get("regular_students", []):
+            student_tutors.setdefault(sname, []).append(tutor["name"])
+
+    enriched = []
+    for reg in regs:
+        is_prob = reg["name"] in prob_names
+        tutors_assigned = student_tutors.get(reg["name"], [])
+        enriched.append({
+            **reg,
+            "is_probation": is_prob,
+            "tutors_assigned": tutors_assigned,
+        })
+
+    # Stats
+    total = len(enriched)
+    prob_count = sum(1 for r in enriched if r["is_probation"])
+    regular_count = total - prob_count
+    assigned_count = sum(1 for r in enriched if r["tutors_assigned"])
+
+    # Group by institution
+    by_institution: dict[str, list] = {}
+    for r in enriched:
+        key = f"{r['institution']} — {r['track']}"
+        by_institution.setdefault(key, []).append(r)
+
+    return render_template(
+        "registrations.html",
+        registrations=enriched,
+        by_institution=by_institution,
+        total=total,
+        prob_count=prob_count,
+        regular_count=regular_count,
+        assigned_count=assigned_count,
+        institutions=config.INSTITUTIONS,
+    )
+
+
+@app.route("/registrations/export")
+def registrations_export():
+    """ייצוא כל ההרשמות לאקסל."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    regs = load_registrations()
+    prob_list = load_probation_students()
+    prob_names = {s["name"] for s in prob_list}
+
+    registry = load_tutors_registry()
+    student_tutors: dict[str, list[str]] = {}
+    for tutor in registry:
+        for sname in tutor.get("probation_students", []):
+            student_tutors.setdefault(sname, []).append(tutor["name"])
+        for sname in tutor.get("regular_students", []):
+            student_tutors.setdefault(sname, []).append(tutor["name"])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "הרשמות לתגבורים"
+    ws.sheet_view.rightToLeft = True
+
+    headers = ["שם סטודנט", "ת.ז.", "מוסד", "מגמה", "קורסים מבוקשים",
+               "סטטוס", "מתגברים משובצים"]
+    ws.append(headers)
+    header_fill = PatternFill("solid", fgColor="6366F1")
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    for reg in regs:
+        is_prob = reg["name"] in prob_names
+        tutors = student_tutors.get(reg["name"], [])
+        ws.append([
+            reg["name"],
+            reg["id_num"],
+            reg["institution"],
+            reg["track"],
+            ", ".join(reg["courses"]),
+            "על תנאי" if is_prob else "רגיל",
+            ", ".join(tutors),
+        ])
+
+    widths = [22, 14, 20, 18, 40, 12, 35]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"registrations_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname,
+    )
+
+
+@app.route("/api/sync-registrations", methods=["POST"])
+def api_sync_registrations():
+    """סנכרון הרשמות: שיבוץ סטודנטים חדשים למתגברים + עדכון לוז."""
+    import auto_scheduler
+    import time as _time
+
+    regs = load_registrations()
+    registry = load_tutors_registry()
+    weekly = load_weekly_schedule()
+    prob_list = load_probation_students()
+    prob_names = {s["name"] for s in prob_list}
+
+    # Build set of already-assigned students (both prob + regular)
+    assigned_set: set[str] = set()
+    for t in registry:
+        for s in t.get("probation_students", []):
+            assigned_set.add(s)
+        for s in t.get("regular_students", []):
+            assigned_set.add(s)
+
+    # Find unassigned registrations (not probation — those are handled separately)
+    new_students = [r for r in regs if r["name"] not in assigned_set and r["name"] not in prob_names]
+    if not new_students:
+        return jsonify({"status": "ok", "message": "אין סטודנטים חדשים לשיבוץ", "assigned": [], "scheduled": []})
+
+    # Index tutors by (institution, track, subject)
+    tutor_by_key: dict[tuple[str, str, str], list[dict]] = {}
+    for t in registry:
+        inst = t.get("institution", "")
+        track = t.get("track", "")
+        actual = t.get("actual_subject", "")
+        if actual:
+            for subj in [s.strip() for s in actual.split(",") if s.strip()]:
+                tutor_by_key.setdefault((inst, track, subj), []).append(t)
+        for subj in t.get("subjects", []):
+            tutor_by_key.setdefault((inst, track, subj), []).append(t)
+
+    # Assign each new student to the best matching tutor
+    assigned_log: list[dict] = []
+    tutors_changed: set[str] = set()
+    for student in new_students:
+        matched = False
+        for course in student["courses"]:
+            key = (student["institution"], student["track"], course)
+            candidates = tutor_by_key.get(key, [])
+            if not candidates:
+                continue
+            # Pick tutor with fewest total students
+            best = min(candidates, key=lambda t: len(t.get("probation_students", [])) + len(t.get("regular_students", [])))
+            # Add student to tutor's regular_students in-memory
+            if student["name"] not in best.get("regular_students", []):
+                best.setdefault("regular_students", []).append(student["name"])
+                best.setdefault("regular_subjects", {})[student["name"]] = course
+                tutors_changed.add(best["name"])
+                assigned_log.append({
+                    "student": student["name"],
+                    "tutor": best["name"],
+                    "subject": course,
+                })
+            matched = True
+        if not matched:
+            assigned_log.append({
+                "student": student["name"],
+                "tutor": None,
+                "subject": None,
+                "error": "לא נמצא מתגבר מתאים",
+            })
+
+    # Write changes to Google Sheets
+    write_count = 0
+    for t in registry:
+        if t["name"] not in tutors_changed:
+            continue
+        update_tutor(t["name"], t)
+        write_count += 1
+        if write_count % 8 == 0:
+            _time.sleep(2)
+
+    # Auto-schedule any tutor that now has students but no schedule slot
+    scheduled_tutors = {s["tutor"] for s in weekly}
+    tutors_needing_schedule = [
+        t for t in registry
+        if t["name"] in tutors_changed
+        and t["name"] not in scheduled_tutors
+    ]
+    scheduled_log: list[dict] = []
+    if tutors_needing_schedule:
+        tutor_to_students = {
+            t["name"]: list(t.get("probation_students", [])) + list(t.get("regular_students", []))
+            for t in registry
+        }
+        class_schedules = auto_scheduler.load_class_schedules()
+        working = list(weekly)
+        for t in tutors_needing_schedule:
+            slots = auto_scheduler.suggest_for_tutor(t, class_schedules, working, tutor_to_students)
+            for slot in slots:
+                new_id = append_schedule_slot(slot)
+                scheduled_log.append({**slot, "id": new_id})
+                working.append(slot)
+                _time.sleep(2)
+
+    cache.clear()
+    return jsonify({
+        "status": "ok",
+        "assigned": assigned_log,
+        "scheduled": scheduled_log,
+        "summary": f"שובצו {len([a for a in assigned_log if a.get('tutor')])} סטודנטים, נוספו {len(scheduled_log)} שיעורים ללוז",
+    })
+
+
+@app.route("/tutors/export")
+def tutors_export():
+    """ייצוא רשימת מתגברים עם הסטודנטים המשובצים אליהם לקובץ Excel."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    tutors_registry = load_tutors_registry()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "מתגברים ושיבוצים"
+    ws.sheet_view.rightToLeft = True
+
+    headers = ["שם מתגבר", "מוסד", "מגמה", "מקצועות (פוטנציאל)", "מקצוע בפועל",
+               "סטודנטים על-תנאי משובצים", "סטודנטים רגילים", "סה\"כ סטודנטים", "טלפון", "הערות"]
+    ws.append(headers)
+    header_fill = PatternFill("solid", fgColor="6366F1")
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    for tutor in tutors_registry:
+        students = tutor.get("probation_students", [])
+        reg_students = tutor.get("regular_students", [])
+        ws.append([
+            tutor.get("name", ""),
+            tutor.get("institution", ""),
+            tutor.get("track", ""),
+            ", ".join(tutor.get("subjects", [])),
+            tutor.get("actual_subject", ""),
+            "\n".join(students),
+            "\n".join(reg_students),
+            len(students) + len(reg_students),
+            tutor.get("phone", ""),
+            tutor.get("notes", ""),
+        ])
+
+    widths = [22, 18, 18, 30, 22, 35, 35, 12, 16, 25]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"tutors_assignments_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname,
+    )
 
 
 @app.route("/refresh")
@@ -701,6 +1138,7 @@ def schedule_page():
     tutor_filter = request.args.get("tutor")
     institution_filter = request.args.get("institution")
     track_filter = request.args.get("track")
+    year_filter = request.args.get("year")
 
     week_dates = _week_dates(date_str)
     df = _get_df()
@@ -715,7 +1153,8 @@ def schedule_page():
         track_filter=track_filter,
     )
 
-    academic_events = _get_academic_events(institution_filter, track_filter)
+    academic_events = _get_academic_events(institution_filter, track_filter, year_filter)
+    available_years = _available_years(institution_filter, track_filter)
 
     # Week navigation
     current_sunday = week_dates[0]
@@ -738,6 +1177,8 @@ def schedule_page():
         tutor_filter=tutor_filter or "",
         institution_filter=institution_filter or "",
         track_filter=track_filter or "",
+        year_filter=year_filter or "",
+        available_years=available_years,
         weekdays=config.WEEKDAYS,
         schedule_events_json=json.dumps(matrix["events"], ensure_ascii=False, default=str),
         academic_events_json=json.dumps(academic_events, ensure_ascii=False),
@@ -751,6 +1192,7 @@ def api_schedule_week():
     tutor_filter = request.args.get("tutor")
     institution_filter = request.args.get("institution")
     track_filter = request.args.get("track")
+    year_filter = request.args.get("year")
 
     week_dates = _week_dates(date_str)
     df = _get_df()
@@ -763,8 +1205,44 @@ def api_schedule_week():
         tutor_filter=tutor_filter, institution_filter=institution_filter,
         track_filter=track_filter,
     )
-    matrix["academic_events"] = _get_academic_events(institution_filter, track_filter)
+    matrix["academic_events"] = _get_academic_events(institution_filter, track_filter, year_filter)
     return jsonify(matrix)
+
+
+@app.route("/class-schedule/print")
+def class_schedule_print():
+    """Printable / PDF-export view of the academic class schedule for a
+    specific institution + track (+ optional year)."""
+    institution = request.args.get("institution", "").strip()
+    track = request.args.get("track", "").strip()
+    year = request.args.get("year", "").strip() or None
+    if not institution or not track:
+        return redirect("/schedule")
+
+    events = _get_academic_events(institution, track, year)
+    available_years = _available_years(institution, track)
+
+    # Trim hour range to actual event bounds (with 1-hour padding).
+    if events:
+        starts = [int(ev["start"].split(":")[0]) for ev in events if ev.get("start")]
+        ends = [int(ev["end"].split(":")[0]) + (1 if ev["end"].split(":")[1] != "00" else 0)
+                for ev in events if ev.get("end")]
+        hour_start = max(0, min(starts))
+        hour_end = min(24, max(ends) + 1)
+    else:
+        hour_start = config.SCHEDULE_HOUR_START
+        hour_end = config.SCHEDULE_HOUR_END
+
+    return render_template(
+        "class_schedule_print.html",
+        institution=institution,
+        track=track,
+        year=year or "",
+        available_years=available_years,
+        events=events,
+        weekdays=config.WEEKDAYS,
+        hours=list(range(hour_start, hour_end)),
+    )
 
 
 @app.route("/api/schedule/add", methods=["POST"])
@@ -878,11 +1356,121 @@ def tutors_registry_page():
     if probation_list is None:
         probation_list = load_probation_students()
         cache.set("probation_list", probation_list)
+    # Group weekly slots per tutor for the "שיעורים בשבוע" column.
+    weekly = _get_weekly()
+    weekday_order = {d: i for i, d in enumerate(config.WEEKDAYS)}
+    tutor_lessons: dict[str, list[dict]] = {}
+    for slot in weekly:
+        tutor_lessons.setdefault(slot["tutor"], []).append(slot)
+    for slots in tutor_lessons.values():
+        slots.sort(key=lambda s: (weekday_order.get(s.get("day", ""), 99), s.get("start", "")))
     return render_template(
         "tutors_registry.html",
         tutors=registry,
         institutions=institutions,
         probation_students=probation_list,
+        tutor_lessons=tutor_lessons,
+    )
+
+
+@app.route("/api/auto-schedule", methods=["POST"])
+def api_auto_schedule():
+    """שיבוץ אוטומטי. mode=preview מחזיר הצעות; mode=commit שומר לסליל."""
+    import auto_scheduler
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "preview")
+    registry = _get_registry()
+    weekly = _get_weekly()
+    suggestions = auto_scheduler.suggest_all(registry, weekly, only_unscheduled=True)
+    if mode != "commit":
+        return jsonify({"suggestions": suggestions, "count": len(suggestions)})
+    saved = []
+    try:
+        for s in suggestions:
+            new_id = append_schedule_slot({
+                "tutor": s["tutor"],
+                "day": s["day"],
+                "start": s["start"],
+                "end": s["end"],
+                "subject": s["subject"],
+                "notes": s.get("notes", ""),
+            })
+            saved.append({**s, "id": new_id})
+        cache.delete("weekly")
+        return jsonify({"status": "ok", "saved": saved, "count": len(saved)})
+    except Exception as e:
+        return jsonify({"error": str(e), "saved": saved}), 500
+
+
+@app.route("/schedule/export")
+def schedule_export():
+    """ייצוא Excel של כל השיעורים השבועיים בכל המוסדות עם המתגבר, היום, השעות והמקצוע."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    weekly = load_weekly_schedule()
+    registry = load_tutors_registry()
+    tutor_info = {t["name"]: t for t in registry}
+    weekday_order = {d: i for i, d in enumerate(config.WEEKDAYS)}
+
+    rows: list[dict] = []
+    for slot in weekly:
+        info = tutor_info.get(slot["tutor"], {})
+        prob_students = info.get("probation_students", [])
+        reg_students = info.get("regular_students", [])
+        all_names = list(prob_students) + list(reg_students)
+        rows.append({
+            "institution": info.get("institution", ""),
+            "track": info.get("track", ""),
+            "tutor": slot["tutor"],
+            "day": slot.get("day", ""),
+            "start": slot.get("start", ""),
+            "end": slot.get("end", ""),
+            "subject": slot.get("subject", "") or info.get("actual_subject", ""),
+            "students": "\n".join(all_names),
+            "num_students": len(prob_students) + len(reg_students),
+            "notes": slot.get("notes", ""),
+        })
+    rows.sort(key=lambda r: (r["institution"], r["track"], r["tutor"],
+                             weekday_order.get(r["day"], 99), r["start"]))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "שיעורים שבועיים"
+    ws.sheet_view.rightToLeft = True
+
+    headers = ["מוסד", "מגמה", "שם מתגבר", "יום", "התחלה", "סיום",
+               "מקצוע", "סטודנטים", "מס' סטודנטים"]
+    ws.append(headers)
+    header_fill = PatternFill("solid", fgColor="6366F1")
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    for r in rows:
+        ws.append([
+            r["institution"], r["track"], r["tutor"], r["day"],
+            r["start"], r["end"], r["subject"],
+            r["students"], r["num_students"],
+        ])
+
+    widths = [20, 18, 22, 10, 10, 10, 22, 40, 12]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"weekly_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname,
     )
 
 
